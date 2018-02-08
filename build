@@ -1,0 +1,1 @@
+clang++-5.0 -Wall -Werror -O2 -g -std=c++17 prolog-interpreter.c++ -o prolog-interpreter
