@@ -230,7 +230,7 @@ public:
 		first{move(f)}, rest{move(r)} {}
 	term(unique_ptr<token> f) : first{move(f)} {}
 	term(const term& t) = delete;
-	unique_ptr<token> &get_first() { return first; }
+	const unique_ptr<token> &get_first() const { return first; }
 	auto &get_rest () { return rest;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };
@@ -251,6 +251,164 @@ operator<<(ostream& os, const term& c)
 	if (!c.rest.empty())
 		os << ")";
 	return os;
+}
+
+/*
+ * unification.
+ * unify 2 terms together, source variable ids are added by offset_source.
+ * destination variable ids are incrementaed add offset_destination.
+ */
+class binding_target {
+private:
+	unique_ptr<term> dummy;
+public:
+	symbol type;
+	uint64_t var_id;
+	unique_ptr<term> &root;
+	binding_target(uint64_t id): type {symbol::variable}, var_id{id}, root {dummy}
+	{}
+	binding_target(unique_ptr<term> &t) : type {symbol::atom}, root {t} {}
+};
+using binding_t = unordered_map<uint64_t, unique_ptr<binding_target>>;
+
+void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
+{
+	for (auto undo : undo_list)
+		assert(binding.erase(undo) == 1);
+}
+
+unique_ptr<binding_target> &
+walk_variable(unique_ptr<binding_target> &t, uint64_t offset, binding_t &binding)
+{
+	if (t->type == symbol::atom)
+		return t;
+	else if (t->type == symbol::variable) {
+		auto n = binding.find(t->var_id);
+		if (n == binding.end())
+			return t;
+		else
+			return walk_variable(n->second, offset, binding);
+	}
+	return t;
+}
+
+optional<vector<uint64_t>> unification(unique_ptr<term> &, unique_ptr<term> &,
+    uint64_t, uint64_t, binding_t &);
+optional<vector<uint64_t>> unify_rest(
+	vector<unique_ptr<term>> &src, vector<unique_ptr<term>> &dst, uint64_t srcoff,
+	uint64_t dstoff, binding_t &binding)
+{
+	auto ss = src.begin(), se = src.end();
+	auto ds = dst.begin(), de = dst.end();
+	vector<uint64_t> all;
+	optional<vector<uint64_t>> r;
+
+	for (;ss != se && ds != de; ss ++, ds ++) {
+		if ((r = unification(*ss, *ds, srcoff, dstoff, binding)))
+			all.insert(all.end(), *r->begin(), *r->end());
+		else
+			goto failure;
+	}
+	if (ss == se && ds == de)
+		return move(all);
+failure:
+	undo_bindings(binding, all);
+	return nullopt;
+}
+
+bool detect_loop(uint64_t id,
+		unique_ptr<binding_target> &t, uint64_t off, binding_t &binding)
+{
+	unique_ptr<term> & pterm = t->root;
+	const unique_ptr<token> &head = pterm->get_first();
+	unique_ptr<binding_target> tmp;
+
+	if (head->get_type() == symbol::variable) {
+		if (head->id + off == id)
+			return false;
+		tmp = make_unique<binding_target>(head->id);
+		unique_ptr<binding_target> &t = walk_variable(tmp, off, binding);
+		return detect_loop(id, t, off, binding);
+	} else {
+		assert(head->get_type() == symbol::atom);
+		auto & rest = pterm->get_rest();
+		for (auto &i : rest) {
+			auto tmp = make_unique<binding_target>(i);
+			if (!detect_loop(id, tmp, off, binding))
+				return false;
+		}
+		return true;
+	}
+	return true;
+}
+
+optional<uint64_t> bind(unique_ptr<binding_target> &from, uint64_t from_off,
+    unique_ptr<binding_target> to, uint64_t to_off, binding_t &binding)
+{
+	assert(to->type == symbol::atom);
+	if (detect_loop(from->var_id + from_off, to, to_off, binding))
+		return nullopt;
+	binding.insert(make_pair(from->var_id + from_off, move(to)));
+	return from->var_id + from_off;
+}
+
+optional<vector<uint64_t>>
+unification_sub(unique_ptr<binding_target> &src, unique_ptr<binding_target> &dst,
+		uint64_t srcoff, uint64_t dstoff, binding_t &binding)
+{
+	optional<vector<uint64_t>> r;
+	vector<uint64_t> all;
+
+	if (src->type == symbol::atom && dst->type == symbol::atom) {
+		if (src->root->get_first()->id == dst->root->get_first()->id) {
+			if ((r = unify_rest(src->root->get_rest(),
+			     dst->root->get_rest(), srcoff, dstoff, binding))) {
+				all.insert(all.end(), *r->begin(), *r->end());
+				return all;
+			} else
+				goto failure;
+		}
+	} else if (src->type == symbol::variable && dst->type == symbol::atom) {
+		optional<uint64_t> key = bind(src, srcoff, move(dst), dstoff, binding);
+		if (key)
+			all.push_back(*key);
+		else
+			goto failure;
+	} else if (dst->type == symbol::variable) {
+		optional<uint64_t> key = bind(dst, dstoff, move(src), srcoff, binding);
+		if (key)
+			all.push_back(*key);
+		else
+			goto failure;
+	} else
+		assert(false);
+failure:
+	undo_bindings(binding, all);
+	return nullopt;
+}
+
+optional<vector<uint64_t>>
+unification(unique_ptr<term> &src, unique_ptr<term> &dst,
+    uint64_t srcoff, uint64_t dstoff, binding_t &binding)
+{
+	unique_ptr<binding_target> srctgt, dsttgt;
+	bool walksrc = false, walkdst = false;
+	if (src->get_first()->get_type() == symbol::atom) {
+		srctgt = make_unique<binding_target>(src);
+	} else {
+		srctgt = make_unique<binding_target>(src->get_first()->id);
+		walksrc = true;
+	}
+	if (dst->get_first()->get_type() == symbol::atom)
+		dsttgt = make_unique<binding_target>(dst);
+	else {
+		dsttgt = make_unique<binding_target>(dst->get_first()->id);
+		walkdst = true;
+	}
+	return unification_sub(walksrc ? walk_variable(srctgt, srcoff, binding)
+	: srctgt, walkdst ? walk_variable(dsttgt, dstoff, binding) : dsttgt,
+	srcoff, dstoff, binding);
+	return nullopt;
 }
 
 template<typename T> optional<vector<T>>
