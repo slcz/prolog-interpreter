@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include "parser.h"
+#include "interpreter.h"
 
 using namespace std;
 
@@ -211,16 +212,6 @@ optional<p_term> parse_term(interp_context &context)
 	return r;
 }
 
-class clause {
-public:
-	p_term head;
-	vector<p_term> body;
-	unique_id id;
-	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {}
-	clause(p_term h) : head{move(h)} {}
-	friend ostream& operator<<(ostream& os, const clause& c);
-};
-
 ostream&
 operator<<(ostream& os, const clause& c)
 {
@@ -232,9 +223,9 @@ operator<<(ostream& os, const clause& c)
 	return os;
 }
 
-optional<unique_ptr<clause>> parse_clause(interp_context &context)
+optional<p_clause> parse_clause(interp_context &context)
 {
-	optional<unique_ptr<clause>> rv;
+	optional<p_clause> rv;
 	optional<p_term> head;
 	optional<vector<p_term>> body;
 	unique_ptr<token> t;
@@ -291,38 +282,28 @@ optional<vector<p_term>> parse_query(interp_context &context)
 	return goals;
 }
 
-bool parse_program(interp_context &context)
+bool program(interp_context &context)
 {
-	optional<vector<unique_ptr<clause>>> c;
-	optional<vector<vector<p_term>>> q;
+	optional<p_clause> c;
+	vector<p_clause> cs;
+	optional<vector<p_term>> q;
+	bool quit = false;
 
-	if (!(c = many(context, parse_clause, symbol::none, false)))
-		throw syntax_error(context.get_position(),
-			"rules parsing error");
-	for (auto &i : *c)
-		cout << *i << endl;
-	if (!(q = many(context, parse_query, symbol::none, false)))
-		throw syntax_error(context.get_position(),
-			"query parsing error");
-	for (auto &i : *q)
-		for (auto &j : i)
-			cout << *j << endl;
-	unique_ptr<token> t = context.get_token();
-	if (t->get_type() != symbol::eof)
-		throw syntax_error(context.get_position(),
-			"end of file expected");
-
-	return true;
-}
-
-bool
-parser(interp_context &context)
-{
-	try {
-		parse_program(context);
-	} catch(syntax_error &e) {
-		cerr << e.what() << endl;
-		return false;
+	while (!quit) {
+		try {
+			if ((c = parse_clause(context))) {
+				cs.push_back(move(*c));
+			} else if ((q = parse_query(context))) {
+				solve(cs, *q);
+			}
+			unique_ptr<token> t = context.get_token();
+			if (t->get_type() != symbol::eof)
+				context.push(t);
+			else
+				quit = true;
+		} catch(syntax_error &e) {
+			cerr << e.what() << endl;
+		}
 	}
 	return true;
 }

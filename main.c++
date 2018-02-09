@@ -12,5 +12,5 @@ using namespace std;
 int main()
 {
 	interp_context context(cin);
-	return parser(context) ? 0 : 1;
+	return program(context) ? 0 : 1;
 }

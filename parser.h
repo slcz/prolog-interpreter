@@ -72,6 +72,17 @@ public:
 };
 using p_term = unique_ptr<term>;
 
+class clause {
+public:
+	p_term head;
+	vector<p_term> body;
+	unique_id id;
+	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {}
+	clause(p_term h) : head{move(h)} {}
+	friend ostream& operator<<(ostream& os, const clause& c);
+};
+using p_clause = unique_ptr<clause>;
+
 class interp_context {
 	using transformer_t = unique_ptr<token> (*)(std::unique_ptr<token>);
 private:
@@ -100,5 +111,5 @@ public:
 	const position_t & get_position() const { return position; }
 };
 
-bool parser(interp_context &);
+bool program(interp_context &);
 optional<p_term> parse_term(interp_context &);
