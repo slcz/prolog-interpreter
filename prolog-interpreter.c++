@@ -235,6 +235,7 @@ public:
 	auto &get_rest () { return rest;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };
+using p_term = unique_ptr<term>;
 
 ostream&
 operator<<(ostream& os, const term& c)
@@ -259,20 +260,21 @@ operator<<(ostream& os, const term& c)
  * unify 2 terms together, source variable ids are added by offset_source.
  * destination variable ids are incrementaed add offset_destination.
  */
-class binding_target {
+class bind_value {
 private:
 	uint64_t offset;
-	unique_ptr<term> &root;
+	p_term &root;
 	uint64_t id() const { return root->get_first()->id; }
 public:
-	binding_target(unique_ptr<term> &t, uint64_t o): offset {o}, root {t} {}
+	bind_value(p_term &t, uint64_t o): offset {o}, root {t} {}
 	symbol get_type() const { return root->get_first()->get_type(); }
 	uint64_t get_id() const { return get_type() == symbol::variable ?
 		offset + id() : id(); }
 	uint64_t get_base() const { return offset; }
-	unique_ptr<term> &get_root() const { return root; }
+	p_term &get_root() const { return root; }
 };
-using binding_t = unordered_map<uint64_t, unique_ptr<binding_target>>;
+using binding_t = unordered_map<uint64_t, unique_ptr<bind_value>>;
+using p_bind_value = unique_ptr<bind_value>;
 
 void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 {
@@ -280,8 +282,7 @@ void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 		assert(binding.erase(undo) == 1);
 }
 
-unique_ptr<binding_target> &
-walk_variable(unique_ptr<binding_target> &t, binding_t &binding)
+p_bind_value & walk_variable(p_bind_value &t, binding_t &binding)
 {
 	if (t->get_type() == symbol::variable) {
 		auto n = binding.find(t->get_id());
@@ -293,10 +294,10 @@ walk_variable(unique_ptr<binding_target> &t, binding_t &binding)
 	return t;
 }
 
-optional<vector<uint64_t>> unification(unique_ptr<term> &, unique_ptr<term> &,
-    uint64_t, uint64_t, binding_t &);
-optional<vector<uint64_t>> unify_rest(unique_ptr<binding_target> &src,
-    unique_ptr<binding_target> &dst, binding_t &binding)
+optional<vector<uint64_t>> unification(p_term &, p_term &, uint64_t, uint64_t,
+		binding_t &);
+optional<vector<uint64_t>> unify_rest(p_bind_value &src, p_bind_value &dst,
+		binding_t &binding)
 {
 	uint64_t srcoff = src->get_base(), dstoff = dst->get_base();
 	auto &srcvec = src->get_root()->get_rest(),
@@ -309,7 +310,7 @@ optional<vector<uint64_t>> unify_rest(unique_ptr<binding_target> &src,
 	for (;ss != se && ds != de; ss ++, ds ++) {
 		if ((r = unification(*ss, *ds, srcoff, dstoff, binding))) {
 			if (!r->empty())
-				all.insert(all.end(), *r->begin(), *r->end());
+				all.insert(all.end(), r->begin(), r->end());
 		} else
 			goto failure;
 	}
@@ -321,22 +322,22 @@ failure:
 }
 
 // returns false if variable binding loop is detected.
-bool detect_loop(uint64_t id, unique_ptr<binding_target> &t, binding_t &binding)
+bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 {
-	unique_ptr<term> &root = t->get_root();
+	p_term &root = t->get_root();
 	uint64_t offset = t->get_base();
 
 	if (t->get_type() == symbol::variable) {
 		if (t->get_id() == id)
 			return false;
-		unique_ptr<binding_target> &tmp = walk_variable(t, binding);
+		p_bind_value &tmp = walk_variable(t, binding);
 		if (t == tmp)
 			return true;
 		return detect_loop(id, tmp, binding);
 	} else {
 		assert(t->get_type() == symbol::atom);
 		for (auto &i : root->get_rest()) {
-			auto tmp = make_unique<binding_target>(i, offset);
+			auto tmp = make_unique<bind_value>(i, offset);
 			if (!detect_loop(id, tmp, binding))
 				return false;
 		}
@@ -345,8 +346,7 @@ bool detect_loop(uint64_t id, unique_ptr<binding_target> &t, binding_t &binding)
 	return true;
 }
 
-optional<uint64_t> bind(unique_ptr<binding_target> &from,
-                        unique_ptr<binding_target> to, binding_t &binding)
+optional<uint64_t> bind(p_bind_value &from, p_bind_value to, binding_t &binding)
 {
 	uint64_t id = from->get_id();
 	if (!detect_loop(id, to, binding))
@@ -356,8 +356,8 @@ optional<uint64_t> bind(unique_ptr<binding_target> &from,
 	return id;
 }
 
-optional<vector<uint64_t>> unification_sub(unique_ptr<binding_target> src,
-		unique_ptr<binding_target> dst, binding_t &binding)
+optional<vector<uint64_t>> unification_sub(p_bind_value src,
+    p_bind_value dst, binding_t &binding)
 {
 	optional<vector<uint64_t>> r;
 	vector<uint64_t> all;
@@ -367,17 +367,18 @@ optional<vector<uint64_t>> unification_sub(unique_ptr<binding_target> src,
 		if (src->get_id() == dst->get_id()) {
 			if ((r = unify_rest(src, dst, binding))) {
 				if (!r->empty())
-					all.insert(all.end(), *r->begin(),
-					           *r->end());
+					all.insert(all.end(), r->begin(),
+					           r->end());
 				return all;
 			} else
 				goto failure;
-		}
+		} else
+			goto failure;
 	} else if (stype == symbol::variable && dtype == symbol::atom) {
 		optional<uint64_t> key = bind(src, move(dst), binding);
-		if (key)
+		if (key) {
 			all.push_back(*key);
-		else
+		} else
 			goto failure;
 	} else if (dtype == symbol::variable) {
 		optional<uint64_t> key = bind(dst, move(src), binding);
@@ -393,23 +394,22 @@ failure:
 	return nullopt;
 }
 
-unique_ptr<binding_target>
-build_target(unique_ptr<term> &root, uint64_t offset, binding_t &binding)
+p_bind_value
+build_target(p_term &root, uint64_t offset, binding_t &binding)
 {
-	unique_ptr<binding_target> newroot;
-	newroot = make_unique<binding_target>(root, offset);
+	p_bind_value newroot;
+	newroot = make_unique<bind_value>(root, offset);
 	auto &tmp = walk_variable(newroot, binding);
 	if (tmp != newroot)
-		newroot = make_unique<binding_target>(tmp->get_root(),
+		newroot = make_unique<bind_value>(tmp->get_root(),
 				tmp->get_base());
 	return newroot;
 }
 
 optional<vector<uint64_t>>
-unification(unique_ptr<term> &src, unique_ptr<term> &dst,
-    uint64_t srcoff, uint64_t dstoff, binding_t &binding)
+unification(p_term &src, p_term &dst, uint64_t srcoff, uint64_t dstoff, binding_t &binding)
 {
-	unique_ptr<binding_target> srctgt, dsttgt;
+	p_bind_value srctgt, dsttgt;
 	srctgt = build_target(src, srcoff, binding);
 	dsttgt = build_target(dst, dstoff, binding);
 	return unification_sub(move(srctgt), move(dsttgt), binding);
@@ -444,11 +444,11 @@ many(interp_context &context, optional<T>(*unit)(interp_context &),
 		return (vec);
 }
 
-optional<unique_ptr<term>> parse_term(interp_context &context)
+optional<p_term> parse_term(interp_context &context)
 {
-	optional<unique_ptr<term>> r;
+	optional<p_term> r;
 	unique_ptr<token> t;
-	optional<vector<unique_ptr<term>>> rest;
+	optional<vector<p_term>> rest;
 
 	t = context.get_token();
 	if (t->get_type() == symbol::atom) {
@@ -481,12 +481,11 @@ optional<unique_ptr<term>> parse_term(interp_context &context)
 
 class clause {
 public:
-	unique_ptr<term> head;
-	vector<unique_ptr<term>> body;
+	p_term head;
+	vector<p_term> body;
 	unique_id id;
-	clause(unique_ptr<term> h, vector<unique_ptr<term>> b) :
-		head{move(h)}, body{move(b)} {}
-	clause(unique_ptr<term> h) : head{move(h)} {}
+	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {}
+	clause(p_term h) : head{move(h)} {}
 	friend ostream& operator<<(ostream& os, const clause& c);
 };
 
@@ -504,8 +503,8 @@ operator<<(ostream& os, const clause& c)
 optional<unique_ptr<clause>> parse_clause(interp_context &context)
 {
 	optional<unique_ptr<clause>> rv;
-	optional<unique_ptr<term>> head;
-	optional<vector<unique_ptr<term>>> body;
+	optional<p_term> head;
+	optional<vector<p_term>> body;
 	unique_ptr<token> t;
 
 	// start a new scope
@@ -539,10 +538,10 @@ optional<unique_ptr<clause>> parse_clause(interp_context &context)
 	return rv;
 }
 
-optional<vector<unique_ptr<term>>> parse_query(interp_context &context)
+optional<vector<p_term>> parse_query(interp_context &context)
 {
 	unique_ptr<token> t = context.get_token();
-	optional<vector<unique_ptr<term>>> goals;
+	optional<vector<p_term>> goals;
 
 	if (t->get_type() != symbol::query) {
 		context.push(t);
@@ -561,8 +560,7 @@ optional<vector<unique_ptr<term>>> parse_query(interp_context &context)
 }
 
 void
-all_variables(unique_ptr<term> &t, uint64_t offset,
-		unordered_map<uint64_t, string> &m)
+all_variables(p_term &t, uint64_t offset, unordered_map<uint64_t, string> &m)
 {
 	const unique_ptr<token> &head = t->get_first();
 
@@ -579,19 +577,17 @@ all_variables(unique_ptr<term> &t, uint64_t offset,
 }
 
 void
-print_term(unique_ptr<binding_target> &t, unordered_map<uint64_t, string> v,
-		binding_t &binding)
+print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
 {
-	unique_ptr<binding_target> &n = walk_variable(t, binding);
+	p_bind_value &n = walk_variable(t, binding);
 	const unique_ptr<token> &first = n->get_root()->get_first();
-	vector<unique_ptr<term>> &rest = n->get_root()->get_rest();
+	vector<p_term> &rest = n->get_root()->get_rest();
 	uint64_t offset = t->get_base();
 	cout << first->get_text();
 	if (n->get_type() == symbol::atom && !rest.empty()) {
 		cout << "(";
 		for (auto &i : rest) {
-			unique_ptr<binding_target> a =
-		 	    make_unique<binding_target>(i, offset);
+			p_bind_value a = make_unique<bind_value>(i, offset);
 			print_term(a, v, binding);
 		}
 		cout << ")";
@@ -616,19 +612,22 @@ print_all(unordered_map<uint64_t, string> v, binding_t &binding)
 void
 test_unification(interp_context &context)
 {
-	optional<unique_ptr<term>> term1, term2;
+	const uint64_t scope_1 = 0, scope_2 = 0;
+	optional<p_term> term1, term2;
 	binding_t binding;
 	optional<vector<uint64_t>> binding_list;
 	unordered_map<uint64_t, string> v;
 
 	assert((term1 = parse_term(context)));
+	context.var_id.clear();
 	assert((term2 = parse_term(context)));
-	if (!(binding_list = unification(*term1, *term2, 0, 0, binding)))
+	if (!(binding_list = unification(*term1, *term2, scope_1,
+					scope_2, binding)))
 		cout << "unification fails" << endl;
 	else {
 		cout << "unification succeeds" << endl;
-		all_variables(*term1, 0, v);
-		all_variables(*term2, 0, v);
+		all_variables(*term1, scope_1, v);
+		all_variables(*term2, scope_2, v);
 		print_all(v, binding);
 	}
 }
@@ -638,7 +637,7 @@ bool parse_program(interp_context &context)
 	test_unification(context);
 #if 0
 	optional<vector<unique_ptr<clause>>> c;
-	optional<vector<vector<unique_ptr<term>>>> q;
+	optional<vector<vector<p_term>>> q;
 
 	if (!(c = many(context, parse_clause, symbol::none, false)))
 		throw syntax_error(context.get_position(),
