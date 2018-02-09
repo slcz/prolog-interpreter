@@ -1,0 +1,10 @@
+% test unification functionality
+% hello A
+% hello-world hello-world
+%A a(b)
+%a(b, c) a(A, B)
+%a(b(C,d), e) a(b(f,D), E)
+%a(b(C,F), e) a(b(f,D), E)
+%a(b,F) a(E, E)
+%c(F) c(d(F))
+a(b, c(D)) a(E, F)
