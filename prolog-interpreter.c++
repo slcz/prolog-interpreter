@@ -112,7 +112,7 @@ private:
 	uint64_t magic;
 public:
 	unique_id() : magic{0} {}
-	void clear() { id_map.clear(); }
+	void clear() { magic = 0; id_map.clear(); }
 	uint64_t get_id(const string &name) {
 		auto i = id_map.find(name);
 		if (i == id_map.end()) {
@@ -280,16 +280,18 @@ void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 unique_ptr<binding_target> &
 walk_variable(unique_ptr<binding_target> &t, uint64_t offset, binding_t &binding)
 {
-	if (t->type == symbol::atom)
+	if (t->type == symbol::atom) {
 		return t;
-	else if (t->type == symbol::variable) {
+	} else if (t->type == symbol::variable) {
 		auto n = binding.find(t->var_id);
 		if (n == binding.end())
 			return t;
-		else
+		else {
+			assert(n->second);
 			return walk_variable(n->second, offset, binding);
+		}
 	}
-	return t;
+	assert(false);
 }
 
 optional<vector<uint64_t>> unification(unique_ptr<term> &, unique_ptr<term> &,
@@ -304,9 +306,10 @@ optional<vector<uint64_t>> unify_rest(
 	optional<vector<uint64_t>> r;
 
 	for (;ss != se && ds != de; ss ++, ds ++) {
-		if ((r = unification(*ss, *ds, srcoff, dstoff, binding)))
-			all.insert(all.end(), *r->begin(), *r->end());
-		else
+		if ((r = unification(*ss, *ds, srcoff, dstoff, binding))) {
+			if (!r->empty())
+				all.insert(all.end(), *r->begin(), *r->end());
+		} else
 			goto failure;
 	}
 	if (ss == se && ds == de)
@@ -319,6 +322,8 @@ failure:
 bool detect_loop(uint64_t id,
 		unique_ptr<binding_target> &t, uint64_t off, binding_t &binding)
 {
+	if (t->type == symbol::variable)
+		return t->var_id != id;
 	unique_ptr<term> & pterm = t->root;
 	const unique_ptr<token> &head = pterm->get_first();
 	unique_ptr<binding_target> tmp;
@@ -328,6 +333,8 @@ bool detect_loop(uint64_t id,
 			return false;
 		tmp = make_unique<binding_target>(head->id);
 		unique_ptr<binding_target> &t = walk_variable(tmp, off, binding);
+		if (t == tmp)
+			return true;
 		return detect_loop(id, t, off, binding);
 	} else {
 		assert(head->get_type() == symbol::atom);
@@ -342,18 +349,18 @@ bool detect_loop(uint64_t id,
 	return true;
 }
 
-optional<uint64_t> bind(unique_ptr<binding_target> &from, uint64_t from_off,
+optional<uint64_t> bind(unique_ptr<binding_target> &from,
     unique_ptr<binding_target> to, uint64_t to_off, binding_t &binding)
 {
-	assert(to->type == symbol::atom);
-	if (detect_loop(from->var_id + from_off, to, to_off, binding))
+	if (!detect_loop(from->var_id, to, to_off, binding))
 		return nullopt;
-	binding.insert(make_pair(from->var_id + from_off, move(to)));
-	return from->var_id + from_off;
+	assert(to);
+	binding.insert(make_pair(from->var_id, move(to)));
+	return from->var_id;
 }
 
 optional<vector<uint64_t>>
-unification_sub(unique_ptr<binding_target> &src, unique_ptr<binding_target> &dst,
+unification_sub(unique_ptr<binding_target> src, unique_ptr<binding_target> dst,
 		uint64_t srcoff, uint64_t dstoff, binding_t &binding)
 {
 	optional<vector<uint64_t>> r;
@@ -363,28 +370,39 @@ unification_sub(unique_ptr<binding_target> &src, unique_ptr<binding_target> &dst
 		if (src->root->get_first()->id == dst->root->get_first()->id) {
 			if ((r = unify_rest(src->root->get_rest(),
 			     dst->root->get_rest(), srcoff, dstoff, binding))) {
-				all.insert(all.end(), *r->begin(), *r->end());
+				if (!r->empty())
+					all.insert(all.end(), *r->begin(), *r->end());
 				return all;
 			} else
 				goto failure;
 		}
 	} else if (src->type == symbol::variable && dst->type == symbol::atom) {
-		optional<uint64_t> key = bind(src, srcoff, move(dst), dstoff, binding);
+		optional<uint64_t> key = bind(src, move(dst), dstoff, binding);
 		if (key)
 			all.push_back(*key);
 		else
 			goto failure;
 	} else if (dst->type == symbol::variable) {
-		optional<uint64_t> key = bind(dst, dstoff, move(src), srcoff, binding);
+		optional<uint64_t> key = bind(dst, move(src), srcoff, binding);
 		if (key)
 			all.push_back(*key);
 		else
 			goto failure;
 	} else
 		assert(false);
+	return all;
 failure:
 	undo_bindings(binding, all);
 	return nullopt;
+}
+
+unique_ptr<binding_target>
+copy_binding(unique_ptr<binding_target> &src)
+{
+	if (src->type == symbol::variable)
+		return make_unique<binding_target>(src->var_id);
+	else
+		return make_unique<binding_target>(src->root);
 }
 
 optional<vector<uint64_t>>
@@ -392,23 +410,21 @@ unification(unique_ptr<term> &src, unique_ptr<term> &dst,
     uint64_t srcoff, uint64_t dstoff, binding_t &binding)
 {
 	unique_ptr<binding_target> srctgt, dsttgt;
-	bool walksrc = false, walkdst = false;
 	if (src->get_first()->get_type() == symbol::atom) {
 		srctgt = make_unique<binding_target>(src);
 	} else {
-		srctgt = make_unique<binding_target>(src->get_first()->id);
-		walksrc = true;
+		srctgt = make_unique<binding_target>(src->get_first()->id + srcoff);
+		auto &tmp = walk_variable(srctgt, srcoff, binding);
+		srctgt = copy_binding(tmp);
 	}
 	if (dst->get_first()->get_type() == symbol::atom)
 		dsttgt = make_unique<binding_target>(dst);
 	else {
-		dsttgt = make_unique<binding_target>(dst->get_first()->id);
-		walkdst = true;
+		dsttgt = make_unique<binding_target>(dst->get_first()->id + dstoff);
+		auto &tmp = walk_variable(dsttgt, dstoff, binding);
+		dsttgt = copy_binding(tmp);
 	}
-	return unification_sub(walksrc ? walk_variable(srctgt, srcoff, binding)
-	: srctgt, walkdst ? walk_variable(dsttgt, dstoff, binding) : dsttgt,
-	srcoff, dstoff, binding);
-	return nullopt;
+	return unification_sub(move(srctgt), move(dsttgt), srcoff, dstoff, binding);
 }
 
 template<typename T> optional<vector<T>>
@@ -556,8 +572,95 @@ optional<vector<unique_ptr<term>>> parse_query(interp_context &context)
 	return goals;
 }
 
+void
+all_variables(unique_ptr<term> &t, uint64_t offset, unordered_map<uint64_t, string> &m)
+{
+	const unique_ptr<token> &head = t->get_first();
+
+	if (head->get_type() == symbol::variable) {
+		uint64_t id = head->id + offset;
+		string s = head->get_text();
+		auto i = m.find(id);
+		if (i == m.end()) {
+			cout << id << ":" << s << endl;
+			m.insert(make_pair<uint64_t, string>(move(id), move(s)));
+		}
+	} else {
+		for (auto &i : t->get_rest())
+			all_variables(i, offset, m);
+	}
+}
+
+void
+print_term(unique_ptr<term> &t)
+{
+	const unique_ptr<token> &first = t->get_first();
+	vector<unique_ptr<term>> &rest = t->get_rest();
+	if (first->get_type() == symbol::atom) {
+		cout << first->get_text();
+		if (!rest.empty()) {
+			cout << "(";
+			for (auto &i : rest)
+				print_term(i);
+			cout << ")";
+		}
+	} else {
+		cout << first->get_text();
+	}
+}
+
+void
+print_all(uint64_t offset, unordered_map<uint64_t, string>v1,
+    unordered_map<uint64_t, string>v2, binding_t &binding)
+{
+	unique_ptr<binding_target> b;
+
+	for (auto &i :v1) {
+		cout << i.second << "=>";
+		b = make_unique<binding_target>(i.first);
+		unique_ptr<binding_target> &n = walk_variable(b, offset, binding);
+		if (n->type == symbol::variable) {
+			auto m = v1.find(n->var_id);
+			if (m == v1.end()) {
+				m = v2.find(n->var_id);
+				if (m == v2.end())
+					cout << n->var_id << endl;
+			}
+			cout << m->second << endl;
+		} else {
+			print_term(n->root);
+			cout << endl;
+		}
+	}
+}
+
+void
+test_unification(interp_context &context)
+{
+	optional<unique_ptr<term>> term1, term2;
+	binding_t binding;
+	optional<vector<uint64_t>> binding_list;
+	unordered_map<uint64_t, string> v1, v2;
+
+	assert((term1 = parse_term(context)));
+	assert((term2 = parse_term(context)));
+	if (!(binding_list = unification(*term1, *term2, 0, 0, binding)))
+		cout << "unification fails" << endl;
+	else {
+		cout << "unification succeeds" << endl;
+		all_variables(*term1, 0, v1);
+		all_variables(*term2, 0, v2);
+		cout << "term 1 binding" << endl;
+		print_all(0, v1, v2, binding);
+		cout << "term 2 binding" << endl;
+		print_all(0, v2, v1, binding);
+	}
+}
+
 bool parse_program(interp_context &context)
 {
+	test_unification(context);
+#if 0
 	optional<vector<unique_ptr<clause>>> c;
 	optional<vector<vector<unique_ptr<term>>>> q;
 
@@ -576,6 +679,7 @@ bool parse_program(interp_context &context)
 	if (t->get_type() != symbol::eof)
 		throw syntax_error(context.get_position(),
 			"end of file expected");
+#endif
 
 	return true;
 }
