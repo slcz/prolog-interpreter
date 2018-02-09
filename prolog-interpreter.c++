@@ -364,30 +364,22 @@ optional<vector<uint64_t>> unification_sub(p_bind_value src,
 	symbol stype = src->get_type(), dtype = dst->get_type();
 
 	if (stype == symbol::atom && dtype == symbol::atom) {
-		if (src->get_id() == dst->get_id()) {
-			if ((r = unify_rest(src, dst, binding))) {
-				if (!r->empty())
-					all.insert(all.end(), r->begin(),
-					           r->end());
-				return all;
-			} else
-				goto failure;
+		if (src->get_id() == dst->get_id() &&
+		    (r = unify_rest(src, dst, binding))) {
+			if (!r->empty())
+				all.insert(all.end(), r->begin(), r->end());
+			return all;
 		} else
 			goto failure;
-	} else if (stype == symbol::variable && dtype == symbol::atom) {
-		optional<uint64_t> key = bind(src, move(dst), binding);
-		if (key) {
-			all.push_back(*key);
-		} else
-			goto failure;
-	} else if (dtype == symbol::variable) {
-		optional<uint64_t> key = bind(dst, move(src), binding);
+	} else {
+		p_bind_value &p1 = dtype == symbol::variable ? dst : src;
+		p_bind_value &p2 = dtype == symbol::variable ? src : dst;
+		optional<uint64_t> key = bind(p1, move(p2), binding);
 		if (key)
 			all.push_back(*key);
 		else
 			goto failure;
-	} else
-		assert(false);
+	}
 	return all;
 failure:
 	undo_bindings(binding, all);
@@ -619,7 +611,6 @@ test_unification(interp_context &context)
 	unordered_map<uint64_t, string> v;
 
 	assert((term1 = parse_term(context)));
-	context.var_id.clear();
 	assert((term2 = parse_term(context)));
 	if (!(binding_list = unification(*term1, *term2, scope_1,
 					scope_2, binding)))
