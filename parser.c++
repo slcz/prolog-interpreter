@@ -71,7 +71,7 @@ unique_ptr<token> interp_context::_get_token()
 
 	next = make_unique<token>(symbol::none);
 	do {
-		if (str.begin() + offset == str.end()) {
+		while (str.begin() + offset == str.end()) {
 			if (!getline(in, str))
 				next = make_unique<token>(symbol::eof);
 			else {
@@ -267,6 +267,9 @@ optional<vector<p_term>> parse_query(interp_context &context)
 	optional<vector<p_term>> goals;
 
 	if (t->get_type() != symbol::query) {
+		if (t->get_type() != symbol::atom)
+			throw syntax_error(context.get_position(),
+				"unexpected character");
 		context.push(t);
 		return nullopt;
 	}

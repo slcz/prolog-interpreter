@@ -46,26 +46,26 @@ public:
 
 void node::expand(vector<uint64_t> vars)
 {
-	uint64_t max = *max_element(vars.begin(), vars.end()) + 1;
-	bound_vars = move(move(vars));
+	uint64_t m = *max_element(vars.begin(), vars.end()) + 1;
+	bound_vars = move(vars);
 	vector<p_term> &body = (*first_clause)->body;
 	if (!body.empty()) {
 		last_child = body.end();
-		node child { clauses, binding,clauses.begin(),body.begin(),max};
+		node child { clauses, binding, clauses.begin(), body.begin(),m};
 		children.push_back(move(child));
 	}
 	assert(first_clause != clauses.end());
 	first_clause ++;
-	top = max;
+	top = m;
 }
 
 bool node::try_unification()
 {
+	auto &f = first_clause;
 	/* try unification */
-	for (auto cls = first_clause; cls != clauses.end(); cls ++) {
-		auto u = unification((*cls)->head, *goal, 0, base, binding);
+	for (; f != clauses.end(); f ++) {
+		auto u =unification((*f)->head, *goal, 0, base, binding);
 		if (u) {
-			first_clause = cls;
 			expand(move(*u));
 			return true;
 		}
@@ -76,28 +76,30 @@ bool node::try_unification()
 bool node::solve()
 {
 	if (children.empty()) {
+		undo_bindings(binding, bound_vars);
+		top = base;
 		if (!try_unification())
 			return false;
+		else if (children.empty())
+			return true;
 	} // fall through
+
 	while (!children.empty()) {
 		node &last = children.back();
 		if (last.solve()) {
 			optional<unique_ptr<node>> next;
+			assert(last.get_top() >= top);
 			top = last.get_top();
-			if ((next = sibling(last_child))) {
+			if ((next = sibling(last_child)))
 				children.push_back(move(**next));
-			} else {
+			else
 				return true;
-			}
 		} else {
 			children.pop_back();
-			if (children.empty())
-				top = base;
-			else
-				top = children.back().get_top();
+			top = children.empty()? base: children.back().get_top();
 		}
 	}
-	return true;
+	return false;
 }
 
 bool
@@ -106,12 +108,18 @@ solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 	unordered_map<uint64_t, string> var_map;
 	binding_t binding;
 	uint64_t id = max_id + 1;
+	bool solved = false;
+
 	assert(!query.empty());
 	for (auto &q : query)
-		all_variables(q, max_id + 1, var_map);
+		all_variables(q, id, var_map);
 
 	node child {clauses, binding, clauses.begin(), query.begin(), id};
 	node root  {clauses, binding, clauses.end(),   query.begin(), id,
 	    query.end(), move(child)};
-	return root.solve();
+	while (root.solve()) {
+		solved = true;
+		print_all(var_map, binding);
+	}
+	return solved;
 }

@@ -13,6 +13,8 @@ using namespace std;
  */
 void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 {
+	if (undo_list.empty())
+		return;
 	for (auto undo : undo_list)
 		assert(binding.erase(undo) == 1);
 }
