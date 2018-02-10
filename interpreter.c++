@@ -81,26 +81,27 @@ bool node::try_unification()
 
 bool node::solve()
 {
-	if (children.empty()) {
-		undo_bindings(binding, bound_vars);
-		if (!try_unification())
-			return false;
-		else if (children.empty())
-			return true;
-	} // fall through
-
-	while (!children.empty()) {
-		node &last = children.back();
-		if (last.solve()) {
-			optional<unique_ptr<node>> next;
-			if ((next = last.sibling(last_child)))
-				children.push_back(move(**next));
-			else
+	while (true) {
+		if (children.empty()) {
+			undo_bindings(binding, bound_vars);
+			if (!try_unification())
+				return false;
+			else if (children.empty())
 				return true;
-		} else
-			children.pop_back();
+		} // fall through
+
+		while (!children.empty()) {
+			node &last = children.back();
+			if (last.solve()) {
+				optional<unique_ptr<node>> next;
+				if ((next = last.sibling(last_child)))
+					children.push_back(move(**next));
+				else
+					return true;
+			} else
+				children.pop_back();
+		}
 	}
-	return false;
 }
 
 bool
@@ -108,13 +109,17 @@ solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 {
 	unordered_map<uint64_t, string> var_map;
 	binding_t binding;
-	uint64_t id = max_id + 1, top;
+	uint64_t id = max_id + 1, top = id, m;
 	bool solved = false;
 
 	assert(!query.empty());
-	for (auto &q : query)
+	for (auto &q : query) {
 		scan_vars(q, id, var_map);
-	top = id + var_map.size();
+		m = find_max_ids(q);
+		if (m > top)
+			top = m;
+	}
+	top = top + id;
 
 	node child {clauses, binding, clauses.begin(), query.begin(), id, top};
 	node root  {clauses, binding, clauses.end(),   query.begin(), id, top,

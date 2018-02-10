@@ -75,6 +75,7 @@ public:
 using p_term  = unique_ptr<term>;
 
 void scan_vars(p_term&, uint64_t, unordered_map<uint64_t, string>&);
+uint64_t find_max_ids(p_term&);
 
 class clause {
 public:
@@ -83,17 +84,15 @@ public:
 	unique_id id;
 	uint64_t  nvars;
 	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {
-		unordered_map<uint64_t, string> m;
-		scan_vars(head, 0, m);
-		for (auto &i : body)
-			scan_vars(i, 0, m);
-		nvars = m.size();
+		uint64_t mx = find_max_ids(head);
+		for (auto &i : body) {
+			uint64_t tmp;
+			if ((tmp = find_max_ids(i)) > mx)
+				mx = tmp;
+		}
+		nvars = mx;
 	}
-	clause(p_term h) : head{move(h)} {
-		unordered_map<uint64_t, string> m;
-		scan_vars(head, 0, m);
-		nvars = m.size();
-	}
+	clause(p_term h) : head{move(h)} { nvars = find_max_ids(head); }
 	friend ostream& operator<<(ostream& os, const clause& c);
 };
 using p_clause = unique_ptr<clause>;
