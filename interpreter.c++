@@ -46,7 +46,7 @@ public:
 
 void node::expand(vector<uint64_t> vars)
 {
-	uint64_t m = *max_element(vars.begin(), vars.end()) + 1;
+	uint64_t m =vars.empty() ? top: *max_element(vars.begin(),vars.end())+1;
 	bound_vars = move(vars);
 	vector<p_term> &body = (*first_clause)->body;
 	if (!body.empty()) {
@@ -122,6 +122,8 @@ solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 	while (root.solve()) {
 		solved = true;
 		print_all(var_map, binding);
+		cout << "solution found" << endl;
 	}
+	if (!solved) cout << "no solution" << endl;
 	return solved;
 }
