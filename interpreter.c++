@@ -36,7 +36,7 @@ public:
 	bool solve();
 	bool try_unification();
 	optional<unique_ptr<node>> sibling(term_iter end) {
-		term_iter n = last_child + 1;
+		term_iter n = goal + 1;
 		if (n == end)
 			return nullopt;
 		return make_unique<node>(clauses, binding, clauses.begin(), n, top);
@@ -64,6 +64,8 @@ bool node::try_unification()
 	auto &f = first_clause;
 	/* try unification */
 	for (; f != clauses.end(); f ++) {
+		assert(*goal);
+		assert((*f)->head);
 		auto u =unification((*f)->head, *goal, 0, base, binding);
 		if (u) {
 			expand(move(*u));
