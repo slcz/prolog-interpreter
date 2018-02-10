@@ -285,6 +285,22 @@ optional<vector<p_term>> parse_query(interp_context &context)
 	return goals;
 }
 
+// find the number of variables
+void scan_vars(p_term &t, uint64_t base, unordered_map<uint64_t, string> &m)
+{
+	const unique_ptr<token> &head = t->get_first();
+	if (head->get_type() == symbol::variable) {
+		uint64_t id = head->id + base;
+		string s = head->get_text();
+		auto i = m.find(id);
+		if (i == m.end())
+			m.insert(make_pair<uint64_t,string>(move(id), move(s)));
+	} else {
+		for (auto &i : t->get_rest())
+			scan_vars(i, base, m);
+	}
+}
+
 bool program(interp_context &context)
 {
 	optional<p_clause> c;

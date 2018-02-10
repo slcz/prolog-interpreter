@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <vector>
 #include <set>
+#include <unordered_map>
 #include "unique-id.h"
 
 namespace {
@@ -20,6 +21,7 @@ namespace {
 	using std::unique_ptr;
 	using std::regex;
 	using std::optional;
+	using std::unordered_map;
 }
 
 enum class symbol { none, atom, ignore, append,
@@ -72,13 +74,26 @@ public:
 };
 using p_term  = unique_ptr<term>;
 
+void scan_vars(p_term&, uint64_t, unordered_map<uint64_t, string>&);
+
 class clause {
 public:
 	p_term head;
 	vector<p_term> body;
 	unique_id id;
-	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {}
-	clause(p_term h) : head{move(h)} {}
+	uint64_t  nvars;
+	clause(p_term h, vector<p_term> b) : head{move(h)}, body{move(b)} {
+		unordered_map<uint64_t, string> m;
+		scan_vars(head, 0, m);
+		for (auto &i : body)
+			scan_vars(i, 0, m);
+		nvars = m.size();
+	}
+	clause(p_term h) : head{move(h)} {
+		unordered_map<uint64_t, string> m;
+		scan_vars(head, 0, m);
+		nvars = m.size();
+	}
 	friend ostream& operator<<(ostream& os, const clause& c);
 };
 using p_clause = unique_ptr<clause>;

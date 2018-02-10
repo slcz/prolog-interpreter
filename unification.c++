@@ -147,23 +147,6 @@ unification(p_term &src, p_term &dst, uint64_t srcoff,
 
 // test
 void
-all_variables(p_term &t, uint64_t offset, unordered_map<uint64_t, string> &m)
-{
-	const unique_ptr<token> &head = t->get_first();
-
-	if (head->get_type() == symbol::variable) {
-		uint64_t id = head->id + offset;
-		string s = head->get_text();
-		auto i = m.find(id);
-		if (i == m.end())
-			m.insert(make_pair<uint64_t,string>(move(id), move(s)));
-	} else {
-		for (auto &i : t->get_rest())
-			all_variables(i, offset, m);
-	}
-}
-
-void
 print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
 {
 	p_bind_value &n = walk_variable(t, binding);
@@ -212,8 +195,8 @@ test_unification(interp_context &context)
 		cout << "unification fails" << endl;
 	else {
 		cout << "unification succeeds" << endl;
-		all_variables(*term1, scope_1, v);
-		all_variables(*term2, scope_2, v);
+		scan_vars(*term1, scope_1, v);
+		scan_vars(*term2, scope_2, v);
 		print_all(v, binding);
 	}
 }
