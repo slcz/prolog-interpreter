@@ -1,3 +1,7 @@
+/*******************************************************************************
+ * Prolog Interpreter
+ ******************************************************************************/
+
 #include <iostream>
 #include <vector>
 #include <optional>
@@ -8,115 +12,106 @@ using namespace std;
 
 using clause_iter = vector<p_clause>::iterator;
 using term_iter = vector<p_term>::iterator;
-class runtime {
+class node {
 private:
-	clause_iter first_clause, last_clause;
-	vector<uint64_t> _variables;
-	uint64_t _base;
-	bool new_goal_pushed;
+	vector<p_clause> &clauses;
+	binding_t        &binding;
+	clause_iter      first_clause;
+	term_iter        goal;
+	term_iter        last_child;
+	vector<uint64_t> bound_vars;
+	const uint64_t   base;
+	uint64_t         top;
+	vector<node>     children;
+	void expand(vector<uint64_t>);
 public:
-	runtime(clause_iter begin, clause_iter end,
-	vector<uint64_t> binding_vars, uint64_t off, bool new_goal) :
-	first_clause{begin}, last_clause{end},
-	_variables{move(binding_vars)}, _base{off}, new_goal_pushed{new_goal} {}
-
-	clause_iter begin() const { return first_clause; }
-	clause_iter end()   const { return last_clause; }
-	const vector<uint64_t> & variables() const {return _variables; }
-	uint64_t base() const { return _base; }
-	bool subgoals_pushed() const { return new_goal_pushed; }
+	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
+	     term_iter _goal, uint64_t off) :
+	     clauses{_cls}, binding{_binding}, first_clause{fst}, goal{_goal},
+	     base{off}, top{off} {}
+	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
+	     term_iter _goal, uint64_t off, term_iter b, node c) :
+	node(_cls, _binding, fst, _goal, off)
+	{ last_child = b; children.push_back(move(c)); }
+	bool solve();
+	bool try_unification();
+	optional<unique_ptr<node>> sibling(term_iter end) {
+		term_iter n = last_child + 1;
+		if (n == end)
+			return nullopt;
+		return make_unique<node>(clauses, binding, clauses.begin(), n, top);
+	}
+	uint64_t get_top() const { return top; }
 };
 
-class goals {
-public:
-	term_iter first, last;
-	goals(term_iter f, term_iter l) : first{f}, last{l} {}
-};
+void node::expand(vector<uint64_t> vars)
+{
+	uint64_t max = *max_element(vars.begin(), vars.end()) + 1;
+	bound_vars = move(move(vars));
+	vector<p_term> &body = (*first_clause)->body;
+	if (!body.empty()) {
+		last_child = body.end();
+		node child { clauses, binding,clauses.begin(),body.begin(),max};
+		children.push_back(move(child));
+	}
+	assert(first_clause != clauses.end());
+	first_clause ++;
+	top = max;
+}
 
-optional<pair<clause_iter, vector<uint64_t>>>
-try_unification(runtime &r, term_iter p_goal, binding_t &bnd)
+bool node::try_unification()
 {
 	/* try unification */
-	for (auto cls = r.begin(); cls != r.end(); cls ++) {
-		auto u = unification((*cls)->head, *p_goal, 0, r.base(), bnd);
-		if (u)
-			return make_pair<clause_iter, vector<uint64_t>>(
-					move(cls), move(*u));
-	}
-	return nullopt;
-}
-
-bool
-build_stack_succ(clause_iter &iter, vector<uint64_t> &bind, runtime &r,
-		vector<goals> &gstack, vector<runtime> &rstack)
-{
-	vector<p_term> &body = (*iter)->body;
-	uint64_t max = *max_element(bind.begin(), bind.end());
-	bool gstack_pushed;
-
-	gstack.back().first ++;
-	if (gstack.back().first == gstack.back().last)
-		gstack.pop_back();
-	if (!body.empty()) {
-		gstack.push_back(goals{ body.begin(), body.end() });
-		gstack_pushed = true;
-	} else {
-		gstack_pushed = false;
-	}
-	if (gstack.empty()) {
-		return true;
-	} else {
-		rstack.push_back(runtime {iter + 1, r.end(), move(bind),
-				max + 1, gstack_pushed});
-		return false;
-	}
-}
-
-bool
-run(vector<goals> gstack, vector<runtime> rstack, binding_t binding,
-    unordered_map<uint64_t, string> &var_map)
-{
-	bool found_one = false;
-	while (!rstack.empty()) {
-		/* pop from rstack, restore environment */
-		runtime r = move(rstack.back());
-		rstack.pop_back();
-		undo_bindings(binding, r.variables());
-		/* pop gstack to restore current goal */
-		if (r.subgoals_pushed())
-			gstack.pop_back();
-		assert(!gstack.empty());
-		goals &group = gstack.back();
-		term_iter p_goal = group.first;
-		p_goal --;
-		auto u = try_unification(r, p_goal, binding);
+	for (auto cls = first_clause; cls != clauses.end(); cls ++) {
+		auto u = unification((*cls)->head, *goal, 0, base, binding);
 		if (u) {
-			if (build_stack_succ(u->first, u->second, r, gstack,
-						rstack)) {
-				print_all(var_map, binding);
-			}
-			found_one = true;
+			first_clause = cls;
+			expand(move(*u));
+			return true;
 		}
 	}
+	return false;
+}
 
-	return found_one;
+bool node::solve()
+{
+	if (children.empty()) {
+		if (!try_unification())
+			return false;
+	} // fall through
+	while (!children.empty()) {
+		node &last = children.back();
+		if (last.solve()) {
+			optional<unique_ptr<node>> next;
+			top = last.get_top();
+			if ((next = sibling(last_child))) {
+				children.push_back(move(**next));
+			} else {
+				return true;
+			}
+		} else {
+			children.pop_back();
+			if (children.empty())
+				top = base;
+			else
+				top = children.back().get_top();
+		}
+	}
+	return true;
 }
 
 bool
-solve(vector<p_clause> &clauses, vector<p_term> &query,
-      uint64_t max_id)
+solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 {
-	vector<goals>   gstack;
-	vector<runtime> rstack;
-	binding_t       binding;
 	unordered_map<uint64_t, string> var_map;
-
+	binding_t binding;
+	uint64_t id = max_id + 1;
 	assert(!query.empty());
 	for (auto &q : query)
 		all_variables(q, max_id + 1, var_map);
-	gstack.push_back(goals(query.begin() + 1, query.end()));
-	rstack.push_back(runtime {clauses.begin(), clauses.end(),
-	    vector<uint64_t>(), max_id + 1, false});
 
-	return run(move(gstack), move(rstack), move(binding), var_map);
+	node child {clauses, binding, clauses.begin(), query.begin(), id};
+	node root  {clauses, binding, clauses.end(),   query.begin(), id,
+	    query.end(), move(child)};
+	return root.solve();
 }
