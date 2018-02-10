@@ -51,7 +51,7 @@ void node::expand(vector<uint64_t> vars)
 	vector<p_term> &body = (*first_clause)->body;
 	if (!body.empty()) {
 		last_child = body.end();
-		node child { clauses, binding, clauses.begin(), body.begin(),m};
+		node child {clauses, binding, clauses.begin(), body.begin(), m};
 		children.push_back(move(child));
 	}
 	assert(first_clause != clauses.end());
@@ -92,7 +92,7 @@ bool node::solve()
 			optional<unique_ptr<node>> next;
 			assert(last.get_top() >= top);
 			top = last.get_top();
-			if ((next = sibling(last_child)))
+			if ((next = last.sibling(last_child)))
 				children.push_back(move(**next));
 			else
 				return true;
