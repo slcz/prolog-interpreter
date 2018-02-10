@@ -10,8 +10,8 @@
 #include "unification.h"
 using namespace std;
 
-using clause_iter = vector<p_clause>::iterator;
-using term_iter = vector<p_term>::iterator;
+using clause_iter = vector<p_clause>::reverse_iterator;
+using term_iter = vector<p_term>::reverse_iterator;
 class node {
 private:
 	vector<p_clause> &clauses;
@@ -39,7 +39,7 @@ public:
 		term_iter n = goal + 1;
 		if (n == end)
 			return nullopt;
-		return make_unique<node>(clauses, binding, clauses.begin(), n, top);
+		return make_unique<node>(clauses, binding, clauses.rbegin(), n, top);
 	}
 	uint64_t get_top() const { return top; }
 };
@@ -50,11 +50,11 @@ void node::expand(vector<uint64_t> vars)
 	bound_vars = move(vars);
 	vector<p_term> &body = (*first_clause)->body;
 	if (!body.empty()) {
-		last_child = body.end();
-		node child {clauses, binding, clauses.begin(), body.begin(), m};
+		last_child = body.rend();
+		node child {clauses, binding, clauses.rbegin(), body.rbegin(), m};
 		children.push_back(move(child));
 	}
-	assert(first_clause != clauses.end());
+	assert(first_clause != clauses.rend());
 	first_clause ++;
 	top = m;
 }
@@ -63,7 +63,7 @@ bool node::try_unification()
 {
 	auto &f = first_clause;
 	/* try unification */
-	for (; f != clauses.end(); f ++) {
+	for (; f != clauses.rend(); f ++) {
 		assert(*goal);
 		assert((*f)->head);
 		auto u =unification((*f)->head, *goal, 0, base, binding);
@@ -116,9 +116,9 @@ solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 	for (auto &q : query)
 		all_variables(q, id, var_map);
 
-	node child {clauses, binding, clauses.begin(), query.begin(), id};
-	node root  {clauses, binding, clauses.end(),   query.begin(), id,
-	    query.end(), move(child)};
+	node child {clauses, binding, clauses.rbegin(), query.rbegin(), id};
+	node root  {clauses, binding, clauses.rend(),   query.rbegin(), id,
+	    query.rend(), move(child)};
 	while (root.solve()) {
 		solved = true;
 		print_all(var_map, binding);

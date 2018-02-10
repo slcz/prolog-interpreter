@@ -1,0 +1,15 @@
+parent(pam, bob).
+parent(tom, bob).
+parent(tom, liz).
+parent(bob, ann).
+parent(bob, pat).
+parent(pat, jim).
+
+/*
+?- parent(bob, pat).
+?- parent(liz, pat).
+?- parent(tom, ben).
+?- parent(X,   liz).
+?- parent(bob, X).
+*/
+?- parent(X, Y).
