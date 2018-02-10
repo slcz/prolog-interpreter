@@ -70,7 +70,7 @@ public:
 	auto &get_rest () { return rest;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };
-using p_term = unique_ptr<term>;
+using p_term  = unique_ptr<term>;
 
 class clause {
 public:

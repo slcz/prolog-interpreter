@@ -294,7 +294,7 @@ bool program(interp_context &context)
 			if ((c = parse_clause(context))) {
 				cs.push_back(move(*c));
 			} else if ((q = parse_query(context))) {
-				solve(cs, *q);
+				solve(cs, *q, context.var_id.max());
 			}
 			unique_ptr<token> t = context.get_token();
 			if (t->get_type() != symbol::eof)

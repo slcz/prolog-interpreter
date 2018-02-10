@@ -2,6 +2,7 @@
 #include <string>
 #include <cstdint>
 #include "parser.h"
+#include "unification.h"
 
 using namespace std;
 
@@ -10,22 +11,6 @@ using namespace std;
  * unify 2 terms together, source variable ids are added by offset_source.
  * destination variable ids are incrementaed add offset_destination.
  */
-class bind_value {
-private:
-	uint64_t offset;
-	p_term &root;
-	uint64_t id() const { return root->get_first()->id; }
-public:
-	bind_value(p_term &t, uint64_t o): offset {o}, root {t} {}
-	symbol get_type() const { return root->get_first()->get_type(); }
-	uint64_t get_id() const { return get_type() == symbol::variable ?
-		offset + id() : id(); }
-	uint64_t get_base() const { return offset; }
-	p_term &get_root() const { return root; }
-};
-using binding_t = unordered_map<uint64_t, unique_ptr<bind_value>>;
-using p_bind_value = unique_ptr<bind_value>;
-
 void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 {
 	for (auto undo : undo_list)
@@ -149,7 +134,8 @@ build_target(p_term &root, uint64_t offset, binding_t &binding)
 }
 
 optional<vector<uint64_t>>
-unification(p_term &src, p_term &dst, uint64_t srcoff, uint64_t dstoff, binding_t &binding)
+unification(p_term &src, p_term &dst, uint64_t srcoff,
+		uint64_t dstoff, binding_t &binding)
 {
 	p_bind_value srctgt, dsttgt;
 	srctgt = build_target(src, srcoff, binding);
@@ -194,7 +180,7 @@ print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
 }
 
 void
-print_all(unordered_map<uint64_t, string> v, binding_t &binding)
+print_all(unordered_map<uint64_t, string> &v, binding_t &binding)
 {
 	for (auto &i :v) {
 		auto n = binding.find(i.first);
@@ -229,4 +215,3 @@ test_unification(interp_context &context)
 		print_all(v, binding);
 	}
 }
-
