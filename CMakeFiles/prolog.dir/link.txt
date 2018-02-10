@@ -1,1 +1,0 @@
-/usr/bin/clang++-5.0   -std=c++17 -Wall -Werror -O2 -g   CMakeFiles/prolog.dir/main.c++.o CMakeFiles/prolog.dir/unification.c++.o CMakeFiles/prolog.dir/parser.c++.o CMakeFiles/prolog.dir/unification-test.c++.o CMakeFiles/prolog.dir/interpreter.c++.o  -o prolog -rdynamic 
