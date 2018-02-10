@@ -12,3 +12,6 @@ parent(pat, jim).
 ?- parent(bob, X).
 ?- parent(X, Y).
 ?- parent(Y, jim), parent(X, Y).
+?- parent(X, Y), parent(Y, jim).
+?- parent(tom, X), parent(X, Y).
+?- parent(X, ann), parent(X, pat).

@@ -27,11 +27,11 @@ private:
 	void expand(vector<uint64_t>);
 public:
 	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
-	     term_iter _goal, uint64_t _base, uint64_t _top) :
+	     term_iter _goal, uint64_t _base, uint64_t &_top) :
 	     clauses{_cls}, binding{_binding}, first_clause{fst}, goal{_goal},
 	     base{_base}, top{_top} {}
 	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
-	     term_iter _goal, uint64_t _base,uint64_t _top,term_iter b, node c):
+	     term_iter _goal,uint64_t _base,uint64_t &_top,term_iter b, node c):
 	node(_cls, _binding, fst, _goal, _base, _top)
 	{ last_child = b; children.push_back(move(c)); }
 	bool solve();
@@ -51,6 +51,7 @@ void node::expand(vector<uint64_t> vars)
 	vector<p_term> &body = (*first_clause)->body;
 	children_base = top;
 	top += (*first_clause)->nvars;
+
 	if (!body.empty()) {
 		last_child = body.end();
 		node child {clauses, binding, clauses.begin(), body.begin(),
@@ -64,11 +65,12 @@ void node::expand(vector<uint64_t> vars)
 bool node::try_unification()
 {
 	auto &f = first_clause;
+	uint64_t t = top;
 	/* try unification */
 	for (; f != clauses.end(); f ++) {
 		assert(*goal);
 		assert((*f)->head);
-		auto u =unification((*f)->head, *goal, 0, base, binding);
+		auto u = unification((*f)->head, *goal, t, base, binding);
 		if (u) {
 			expand(move(*u));
 			return true;
@@ -120,8 +122,9 @@ solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
 	while (root.solve()) {
 		solved = true;
 		print_all(var_map, binding);
-		cout << "solution found" << endl;
+		cout << "yes" << endl;
 	}
-	if (!solved) cout << "no solution" << endl;
+	if (!solved) cout << "no"; else cout << "no-more";
+	cout << endl;
 	return solved;
 }
