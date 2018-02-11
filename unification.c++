@@ -191,26 +191,3 @@ print_all(const unordered_map<uint64_t, string> &v, const binding_t &binding)
 		}
 	}
 }
-
-void
-test_unification(interp_context &context)
-{
-	const uint64_t scope_1 = 0, scope_2 = 0;
-	optional<p_term> term1, term2;
-	binding_t binding;
-	optional<vector<uint64_t>> binding_list;
-	unordered_map<uint64_t, string> v;
-
-	assert((term1 = parse_term(context)));
-	assert((term2 = parse_term(context)));
-	if (!(binding_list = unification(*term1, *term2, scope_1,
-					scope_2, binding)))
-		cout << "unification fails" << endl;
-	else {
-		cout << "unification succeeds" << endl;
-		const auto t1 = move(*term1), t2 = move(*term2);
-		scan_vars(t1, scope_1, v);
-		scan_vars(t2, scope_2, v);
-		print_all(v, binding);
-	}
-}
