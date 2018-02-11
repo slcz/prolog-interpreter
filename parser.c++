@@ -331,8 +331,8 @@ optional<p_term> parse_exp_next(interp_context &context, int priority)
 
 class exp_return {
 public:
-	p_term            exp;
-	unique_ptr<token> tok;
+	p_term            exp; // can be empty
+	unique_ptr<token> tok; // can be empty
 	bool              ok;
 	bool              cont;
 };
@@ -341,28 +341,26 @@ class exp_param {
 public:
 	interp_context &context;
 	int            priority;
-	exp_param(interp_context &c, int prio) :
-		context{c}, priority {prio} {}
+	exp_param(interp_context &c, int prio) : context{c}, priority {prio} {}
 };
 
-void check_op(exp_param &param, exp_return &r, void (*f)(exp_param &,
-              exp_return &, op_t &))
+exp_return check_op(exp_param &param,
+    exp_return (*f)(exp_param &, op_t &, exp_return &))
 {
+	exp_return r;
 	r.tok = param.context.get_token();
 	if (r.tok->get_type() == symbol::atom) {
 		op_t &op = param.context.ops.getop(r.tok->get_text());
-		if (!op.null() && op.get_pred() == param.priority) {
-			f(param, r, op);
-			return;
-		}
+		if (!op.null() && op.get_pred() == param.priority)
+			return f(param, op, r);
 	}
 	param.context.push(r.tok);
 	r.cont = true;
 	r.ok   = false;
-	return;
+	return r;
 }
 
-void parse_exp_prefix(exp_param &param, exp_return &r, op_t &op)
+exp_return parse_exp_prefix(exp_param &param, op_t &op, exp_return &r)
 {
 	optional<p_term> p;
 	if (op.noassoc())
@@ -377,10 +375,10 @@ void parse_exp_prefix(exp_param &param, exp_return &r, op_t &op)
 	r.exp  = make_unique<term>(move(r.tok), move(v));
 	r.ok   = true;
 	r.cont = !op.noassoc();
-	return;
+	return move(r);
 }
 
-void parse_exp_infix_postfix(exp_param &param, exp_return &r, op_t &op)
+exp_return parse_exp_infix_postfix(exp_param &param, op_t &op, exp_return &r)
 {
 	optional<p_term> p;
 	if (op.infix()) {
@@ -393,13 +391,13 @@ void parse_exp_infix_postfix(exp_param &param, exp_return &r, op_t &op)
 		r.exp  = move(*p);
 		r.ok   = true;
 		r.cont = op.lassoc();
-		return;
+		return move(r);
 	}
 	if (op.postfix()) {
 		r.exp = unique_ptr<term>(nullptr);
 		r.ok  = true;
 		r.cont = !op.noassoc();
-		return;
+		return move(r);
 	}
 fail:
 	throw syntax_error(param.context.get_position(), "expression expected.");
@@ -411,7 +409,7 @@ optional<p_term> parse_exp(interp_context &context, int priority)
 	exp_return r1, r2;
 	p_term exp;
 
-	check_op(param, r1, parse_exp_prefix);
+	r1 = check_op(param, parse_exp_prefix);
 	if (r1.ok) {
 		exp = move(r1.exp);
 		if (!r1.cont)
@@ -425,13 +423,14 @@ optional<p_term> parse_exp(interp_context &context, int priority)
 
 	while (true) {
 		exp_param param {context, priority};
-		check_op(param, r2, parse_exp_infix_postfix);
+		r2 = check_op(param, parse_exp_infix_postfix);
 		if (!r2.ok)
 			return move(exp);
 		vector<p_term> v;
 		v.push_back(move(exp));
 		if (r2.exp)
 			v.push_back(move(r2.exp));
+		assert(r2.tok);
 		exp = make_unique<term>(move(r2.tok), move(v));
 		if (!r2.cont)
 			return move(exp);
@@ -603,6 +602,7 @@ bool program()
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {
+				cout << **c << endl;
 				cs.push_back(move(*c));
 			} else if ((q = parse_query(context))) {
 				solve(cs, *q, context.var_id.max());
