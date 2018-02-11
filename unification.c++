@@ -31,8 +31,8 @@ p_bind_value & walk_variable(p_bind_value &t, binding_t &binding)
 	return t;
 }
 
-optional<vector<uint64_t>> unification(p_term &, p_term &, uint64_t, uint64_t,
-		binding_t &);
+optional<vector<uint64_t>> unification(const p_term &, const p_term &,
+		uint64_t, uint64_t, binding_t &);
 optional<vector<uint64_t>> unify_rest(p_bind_value &src, p_bind_value &dst,
 		binding_t &binding)
 {
@@ -59,7 +59,7 @@ failure:
 }
 
 inline bool
-is_wildcard(unique_ptr<token> &a)
+is_wildcard(const unique_ptr<token> &a)
 {
 	return a->get_type() == symbol::variable && a->get_text() == "_";
 }
@@ -67,7 +67,7 @@ is_wildcard(unique_ptr<token> &a)
 // returns false if variable binding loop is detected.
 bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 {
-	p_term &root = t->get_root();
+	const p_term &root = t->get_root();
 	uint64_t offset = t->get_base();
 
 	if (t->get_type() == symbol::variable) {
@@ -79,7 +79,7 @@ bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 		return detect_loop(id, tmp, binding);
 	} else {
 		assert(t->get_type() == symbol::atom);
-		for (auto &i : root->get_rest()) {
+		for (const auto &i : root->get_rest()) {
 			auto tmp = make_unique<bind_value>(i, offset);
 			if (!detect_loop(id, tmp, binding))
 				return false;
@@ -136,7 +136,7 @@ failure:
 }
 
 p_bind_value
-build_target(p_term &root, uint64_t offset, binding_t &binding)
+build_target(const p_term &root, uint64_t offset, binding_t &binding)
 {
 	p_bind_value newroot;
 	newroot = make_unique<bind_value>(root, offset);
@@ -148,7 +148,7 @@ build_target(p_term &root, uint64_t offset, binding_t &binding)
 }
 
 optional<vector<uint64_t>>
-unification(p_term &src, p_term &dst, uint64_t srcoff,
+unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 		uint64_t dstoff, binding_t &binding)
 {
 	p_bind_value srctgt, dsttgt;
@@ -163,7 +163,7 @@ print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
 {
 	p_bind_value &n = walk_variable(t, binding);
 	const unique_ptr<token> &first = n->get_root()->get_first();
-	vector<p_term> &rest = n->get_root()->get_rest();
+	const vector<p_term> &rest = n->get_root()->get_rest();
 	uint64_t offset = t->get_base();
 	cout << first->get_text();
 	if (n->get_type() == symbol::atom && !rest.empty()) {
@@ -207,8 +207,9 @@ test_unification(interp_context &context)
 		cout << "unification fails" << endl;
 	else {
 		cout << "unification succeeds" << endl;
-		scan_vars(*term1, scope_1, v);
-		scan_vars(*term2, scope_2, v);
+		const auto t1 = move(*term1), t2 = move(*term2);
+		scan_vars(t1, scope_1, v);
+		scan_vars(t2, scope_2, v);
 		print_all(v, binding);
 	}
 }

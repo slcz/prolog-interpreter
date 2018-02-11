@@ -285,7 +285,7 @@ optional<vector<p_term>> parse_query(interp_context &context)
 	return goals;
 }
 
-uint64_t find_max_ids(p_term &t)
+uint64_t find_max_ids(const p_term &t)
 {
 	uint64_t max_id = 0;
 	const unique_ptr<token> &head = t->get_first();
@@ -303,7 +303,8 @@ uint64_t find_max_ids(p_term &t)
 }
 
 // find the number of variables
-void scan_vars(p_term &t, uint64_t base, unordered_map<uint64_t, string> &m)
+void scan_vars(const p_term &t, uint64_t base,
+		unordered_map<uint64_t, string> &m)
 {
 	const unique_ptr<token> &head = t->get_first();
 	if (head->get_type() == symbol::variable) {

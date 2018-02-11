@@ -68,14 +68,14 @@ public:
 		first{move(f)}, rest{move(r)} {}
 	term(unique_ptr<token> f) : first{move(f)} {}
 	term(const term& t) = delete;
-	unique_ptr<token> &get_first() { return first; }
-	auto &get_rest () { return rest;  }
+	const unique_ptr<token> &get_first() { return first; }
+	const auto &get_rest () { return rest;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };
 using p_term  = unique_ptr<term>;
 
-void scan_vars(p_term&, uint64_t, unordered_map<uint64_t, string>&);
-uint64_t find_max_ids(p_term&);
+void scan_vars(const p_term&, uint64_t, unordered_map<uint64_t, string>&);
+uint64_t find_max_ids(const p_term&);
 
 class clause {
 public:
