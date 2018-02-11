@@ -68,7 +68,7 @@ public:
 		first{move(f)}, rest{move(r)} {}
 	term(unique_ptr<token> f) : first{move(f)} {}
 	term(const term& t) = delete;
-	const unique_ptr<token> &get_first() const { return first; }
+	unique_ptr<token> &get_first() { return first; }
 	auto &get_rest () { return rest;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };

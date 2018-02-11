@@ -58,6 +58,12 @@ failure:
 	return nullopt;
 }
 
+inline bool
+is_wildcard(unique_ptr<token> &a)
+{
+	return a->get_type() == symbol::variable && a->get_text() == "_";
+}
+
 // returns false if variable binding loop is detected.
 bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 {
@@ -86,6 +92,10 @@ bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 optional<uint64_t> bind(p_bind_value &from, p_bind_value to, binding_t &binding)
 {
 	uint64_t id = from->get_id();
+	assert(id != 0);
+	if (is_wildcard(from->get_root()->get_first()) ||
+	    is_wildcard(to->get_root()->get_first()))
+		return 0;
 	if (!detect_loop(id, to, binding))
 		return nullopt;
 	assert(to);
@@ -112,9 +122,11 @@ optional<vector<uint64_t>> unification_sub(p_bind_value src,
 		p_bind_value &p1 = dtype == symbol::variable ? dst : src;
 		p_bind_value &p2 = dtype == symbol::variable ? src : dst;
 		optional<uint64_t> key = bind(p1, move(p2), binding);
-		if (key)
-			all.push_back(*key);
-		else
+		if (key) {
+			/* wildcard matching */
+			if (*key != 0)
+				all.push_back(*key);
+		} else
 			goto failure;
 	}
 	return all;

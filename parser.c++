@@ -35,13 +35,13 @@ struct token_parser_entry {
 	{regex("^,"),                           symbol::comma   },
 	{regex("^\\("),                         symbol::lparen  },
 	{regex("^\\)"),                         symbol::rparen  },
-	{regex("^[[:lower:]_$][[:alnum:]_$]*"), symbol::atom    },
+	{regex("^[[:lower:]][[:alnum:]_$]*"),   symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
 	{regex("^[#&*+-./:<=>?@^~]+"),          symbol::atom    },
 	{regex(R"(^'(\\.|[^'\\])*')"),          symbol::atom    },
 	{regex(R"(^'.*)"),                      symbol::append  },
-	{regex("^[[:upper:]][_$[:alnum:]]*"),   symbol::variable},
+	{regex("^[_$[:upper:]][_$[:alnum:]]*"), symbol::variable},
 	{regex("^."),                           symbol::error   }
 };
 

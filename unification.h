@@ -22,7 +22,7 @@ public:
 	uint64_t get_id() const { return get_type() == symbol::variable ?
 		offset + id() : id(); }
 	uint64_t get_base() const { return offset; }
-	p_term &get_root() const { return root; }
+	p_term &get_root() { return root; }
 };
 using binding_t = unordered_map<uint64_t, unique_ptr<bind_value>>;
 using p_bind_value = unique_ptr<bind_value>;
