@@ -19,7 +19,7 @@ void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
 		assert(binding.erase(undo) == 1);
 }
 
-p_bind_value & walk_variable(p_bind_value &t, binding_t &binding)
+const p_bind_value & walk_variable(const p_bind_value &t, const binding_t &binding)
 {
 	if (t->get_type() == symbol::variable) {
 		auto n = binding.find(t->get_id());
@@ -65,7 +65,7 @@ is_wildcard(const unique_ptr<token> &a)
 }
 
 // returns false if variable binding loop is detected.
-bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
+bool detect_loop(uint64_t id, const p_bind_value &t, const binding_t &binding)
 {
 	const p_term &root = t->get_root();
 	uint64_t offset = t->get_base();
@@ -73,7 +73,7 @@ bool detect_loop(uint64_t id, p_bind_value &t, binding_t &binding)
 	if (t->get_type() == symbol::variable) {
 		if (t->get_id() == id)
 			return false;
-		p_bind_value &tmp = walk_variable(t, binding);
+		const p_bind_value &tmp = walk_variable(t, binding);
 		if (t == tmp)
 			return true;
 		return detect_loop(id, tmp, binding);
@@ -159,9 +159,10 @@ unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 
 // test
 void
-print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
+print_term(const p_bind_value &t, const unordered_map<uint64_t, string> v,
+		const binding_t &binding)
 {
-	p_bind_value &n = walk_variable(t, binding);
+	const p_bind_value &n = walk_variable(t, binding);
 	const unique_ptr<token> &first = n->get_root()->get_first();
 	const vector<p_term> &rest = n->get_root()->get_rest();
 	uint64_t offset = t->get_base();
@@ -177,7 +178,7 @@ print_term(p_bind_value &t,unordered_map<uint64_t, string> v,binding_t &binding)
 }
 
 void
-print_all(unordered_map<uint64_t, string> &v, binding_t &binding)
+print_all(const unordered_map<uint64_t, string> &v, const binding_t &binding)
 {
 	for (auto &i :v) {
 		auto n = binding.find(i.first);

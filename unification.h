@@ -22,7 +22,7 @@ public:
 	uint64_t get_id() const { return get_type() == symbol::variable ?
 		offset + id() : id(); }
 	uint64_t get_base() const { return offset; }
-	const p_term &get_root() { return root; }
+	const p_term &get_root() const { return root; }
 };
 using binding_t = unordered_map<uint64_t, unique_ptr<bind_value>>;
 using p_bind_value = unique_ptr<bind_value>;
@@ -30,5 +30,4 @@ using p_bind_value = unique_ptr<bind_value>;
 optional<vector<uint64_t>>
 unification(const p_term &, const p_term &, uint64_t, uint64_t, binding_t &);
 void undo_bindings(binding_t &, const vector<uint64_t> &);
-void all_variables(p_term &, uint64_t, unordered_map<uint64_t, string> &);
-void print_all(unordered_map<uint64_t, string> &, binding_t &);
+void print_all(const unordered_map<uint64_t, string> &, const binding_t &);

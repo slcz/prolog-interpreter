@@ -10,11 +10,11 @@
 #include "unification.h"
 using namespace std;
 
-using clause_iter = vector<p_clause>::iterator;
-using term_iter = vector<p_term>::iterator;
+using clause_iter = vector<p_clause>::const_iterator;
+using term_iter = vector<p_term>::const_iterator;
 class node {
 private:
-	vector<p_clause> &clauses;
+	const vector<p_clause> &clauses;
 	binding_t        &binding;
 	clause_iter      first_clause;
 	term_iter        goal;
@@ -26,12 +26,13 @@ private:
 	vector<node>     children;
 	void expand(vector<uint64_t>);
 public:
-	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
-	     term_iter _goal, uint64_t _base, uint64_t &_top) :
+	node(const vector<p_clause> &_cls, binding_t &_binding,
+	     clause_iter fst, term_iter _goal, uint64_t _base, uint64_t &_top) :
 	     clauses{_cls}, binding{_binding}, first_clause{fst}, goal{_goal},
 	     base{_base}, top{_top} {}
-	node(vector<p_clause> &_cls, binding_t &_binding, clause_iter fst,
-	     term_iter _goal,uint64_t _base,uint64_t &_top,term_iter b, node c):
+	node(const vector<p_clause> &_cls, binding_t &_binding,
+	     clause_iter fst, term_iter _goal,uint64_t _base,uint64_t &_top,
+	     term_iter b, node c):
 	node(_cls, _binding, fst, _goal, _base, _top)
 	{ last_child = b; children.push_back(move(c)); }
 	bool solve();
@@ -105,7 +106,7 @@ bool node::solve()
 }
 
 bool
-solve(vector<p_clause> &clauses, vector<p_term> &query, uint64_t max_id)
+solve(const vector<p_clause> &clauses, const vector<p_term> &query, uint64_t max_id)
 {
 	unordered_map<uint64_t, string> var_map;
 	binding_t binding;
