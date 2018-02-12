@@ -133,9 +133,9 @@ struct token_parser_entry {
 	{regex("^,"),                           symbol::comma   },
 	{regex("^\\("),                         symbol::lparen  },
 	{regex("^\\)"),                         symbol::rparen  },
+	{regex("^[[:digit:]]+"),                symbol::number  },
 	{regex("^[[:lower:]][[:alnum:]_]*"),    symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
-	{regex("^[0-9]+"),                      symbol::atom    },
 	{regex("^:-"),                          symbol::rules   },
 	{regex("^[#$&*+-./:<=>?@^~\\\\]+"),     symbol::atom    },
 	{regex(R"(^'(\\.|[^'\\])*')"),          symbol::atom    },
@@ -589,6 +589,15 @@ void scan_vars(const p_term &t, uint64_t base,
 	}
 }
 
+unique_ptr<token> number_transformer(unique_ptr<token> t)
+{
+	if (t->get_type() == symbol::number) {
+		t->set_intvalue(stoi(t->get_text()));
+		t->set_type(symbol::atom);
+	}
+	return t;
+}
+
 bool program()
 {
 	interp_context context {cin};
@@ -597,6 +606,7 @@ bool program()
 	vector<p_term> q;
 	bool quit = false;
 
+	context.ins_transformer(number_transformer);
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {

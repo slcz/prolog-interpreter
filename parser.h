@@ -24,7 +24,7 @@ namespace {
 	using std::unordered_map;
 }
 
-enum class symbol { none, atom, ignore, append,
+enum class symbol { none, atom, ignore, append, number,
                     variable, error, lparen, rparen,
 	            eof, query, rules, comma, period };
 using position_t = std::pair<uint32_t, uint32_t>;
@@ -34,9 +34,14 @@ private:
 	string text;
 	symbol token_type;
 	position_t position;
+	int intvalue;
+	bool isint;
 public:
 	token(symbol type) : token_type { type } {}
 	token() : token(symbol::error) {}
+	void set_intvalue(int value) { intvalue = value; isint = true;}
+	bool is_intvalue() { return isint; }
+	int get_intvalue() { return intvalue; }
 	bool match(string::const_iterator begin,
 			string::const_iterator end,
 			const regex &pat, symbol type) {
