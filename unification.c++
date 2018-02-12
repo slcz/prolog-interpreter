@@ -119,29 +119,29 @@ unify_terms(p_bind_value &src, p_bind_value &dst, binding_t &binding)
 	vector<uint64_t> all;
 	symbol stype = src->get_type(), dtype = dst->get_type();
 
-	if (stype == symbol::atom && dtype == symbol::atom) {
-		if (src->get_id() == dst->get_id() &&
-		    (r = unify_rest(src, dst, binding))) {
-			if (!r->empty())
-				all.insert(all.end(), r->begin(), r->end());
-			return all;
-		} else
-			goto failure;
+	assert(stype == symbol::atom && dtype == symbol::atom);
+	if (src->get_id() == dst->get_id() &&
+	    (r = unify_rest(src, dst, binding))) {
+		if (!r->empty())
+			all.insert(all.end(), r->begin(), r->end());
+		return all;
 	} else {
-		p_bind_value &p1  = dtype == symbol::variable ? dst : src;
-		bind_t p2 = dtype == symbol::variable ? src : dst;
-		optional<uint64_t> key = bind(p1, move(p2), binding);
-		if (key) {
-			/* wildcard matching */
-			if (*key != 0)
-				all.push_back(*key);
-		} else
-			goto failure;
+		undo_bindings(binding, all);
+		return nullopt;
+	}
+}
+
+optional<vector<uint64_t>>
+unify_variable(p_bind_value &src, bind_t dst, binding_t &binding)
+{
+	vector<uint64_t> all;
+	optional<uint64_t> key = bind(src, move(dst), binding);
+	if (key) {
+		/* wildcard matching */
+		if (*key != 0)
+			all.push_back(*key);
 	}
 	return all;
-failure:
-	undo_bindings(binding, all);
-	return nullopt;
 }
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -150,6 +150,11 @@ template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 optional<vector<uint64_t>> unification_sub(bind_t src, bind_t dst,
         binding_t &binding)
 {
+	if (holds_alternative<p_bind_value>(src)) {
+		p_bind_value p = get<p_bind_value>(src);
+		if (p->get_root()->get_first()->get_type() == symbol::variable)
+			return unify_variable(p, dst, binding);
+	}
 	if (src.index() != dst.index())
 		return nullopt;
 	return visit(overloaded {
@@ -189,7 +194,13 @@ unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 	bind_t srctgt, dsttgt;
 	srctgt = build_target(src, srcoff, binding);
 	dsttgt = build_target(dst, dstoff, binding);
-	return unification_sub(move(srctgt), move(dsttgt), binding);
+	if (holds_alternative<p_bind_value>(srctgt)) {
+		p_bind_value p = get<p_bind_value>(srctgt);
+		if (p->get_root()->get_first()->get_type() == symbol::variable)
+			return unification_sub(move(srctgt), move(dsttgt),
+					binding);
+	}
+	return unification_sub(move(dsttgt), move(srctgt), binding);
 }
 
 // test
@@ -199,8 +210,10 @@ print_term(const bind_t &value, const unordered_map<uint64_t, string> v,
 {
 	const bind_t &n = walk_variable(value, binding);
 
-	if (holds_alternative<int>(n))
-		cout << get<int>(n) << endl;
+	if (holds_alternative<int>(n)) {
+		cout << get<int>(n);
+		return;
+	}
 
 	p_bind_value t = get<p_bind_value>(n);
 
