@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.3)
-set (CMAKE_CXX_COMPILER "/usr/bin/clang++-5.0")
+set (CMAKE_CXX_COMPILER "/usr/bin/g++-7")
 project (prolog)
 set (CMAKE_CXX_FLAGS "-std=c++17 -Wall -Werror -O2 -g")
 set (prolog_VERSION_MAJOR 0)

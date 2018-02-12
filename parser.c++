@@ -135,6 +135,7 @@ struct token_parser_entry {
 	{regex("^\\)"),                         symbol::rparen  },
 	{regex("^[[:lower:]][[:alnum:]_]*"),    symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
+	{regex("^[0-9]+"),                      symbol::atom    },
 	{regex("^:-"),                          symbol::rules   },
 	{regex("^[#$&*+-./:<=>?@^~\\\\]+"),     symbol::atom    },
 	{regex(R"(^'(\\.|[^'\\])*')"),          symbol::atom    },
@@ -274,9 +275,9 @@ operator<<(ostream& os, const term& c)
 	return os;
 }
 
-template<typename T> optional<vector<T>>
+template<typename T> vector<T>
 many(interp_context &context, optional<T>(*unit)(interp_context &),
-		const symbol delimiter = symbol::none, bool non_empty = true)
+		const symbol delimiter = symbol::none)
 {
 	unique_ptr<token> tok;
 	vector<T> vec;
@@ -297,10 +298,7 @@ many(interp_context &context, optional<T>(*unit)(interp_context &),
 	}
 	if (next)
 		throw syntax_error(context.get_position(), "unexpected char");
-	if (non_empty && vec.empty())
-		return nullopt;
-	else
-		return (vec);
+	return (vec);
 }
 
 optional<p_term> parse_exp(interp_context &, int);
@@ -449,7 +447,7 @@ optional<p_term> parse_term(interp_context &context)
 {
 	optional<p_term> r;
 	unique_ptr<token> t;
-	optional<vector<p_term>> rest;
+	vector<p_term> rest;
 
 	t = context.get_token();
 	if (t->get_type() == symbol::atom) {
@@ -457,14 +455,14 @@ optional<p_term> parse_term(interp_context &context)
 		t->id = id;
 		unique_ptr<token> next = context.get_token();
 		if (next->get_type() == symbol::lparen) {
-			if (!(rest = many(context, parse_expression,
-							symbol::comma)))
+			if ((rest = many(context, parse_expression,
+					symbol::comma)).empty())
 				throw syntax_error(
 				    context.get_position(), "term expected");
 			if (context.get_token()->get_type() != symbol::rparen)
 				throw syntax_error(
 				    context.get_position(), ") expected");
-			r = make_unique<term>(move(t), move(*rest));
+			r = make_unique<term>(move(t), move(rest));
 		} else {
 			context.push(next);
 			r = make_unique<term>(move(t));
@@ -499,7 +497,7 @@ optional<p_clause> parse_clause(interp_context &context)
 {
 	optional<p_clause> rv;
 	optional<p_term> head;
-	optional<vector<p_term>> body;
+	vector<p_term> body;
 	unique_ptr<token> t;
 
 	// start a new scope
@@ -519,10 +517,10 @@ optional<p_clause> parse_clause(interp_context &context)
 					". or :- expected");
 			// body
 			body = many(context, parse_expression, symbol::comma);
-			if (!body)
+			if (body.empty())
 				throw syntax_error(context.get_position(),
 					"rule body expected");
-			rv = make_unique<clause>(move(*head), move(*body));
+			rv = make_unique<clause>(move(*head), move(body));
 			if (expect_period(context)->get_type() != symbol::period)
 				throw syntax_error(context.get_position(),
 					". expected");
@@ -533,22 +531,22 @@ optional<p_clause> parse_clause(interp_context &context)
 	return rv;
 }
 
-optional<vector<p_term>> parse_query(interp_context &context)
+vector<p_term> parse_query(interp_context &context)
 {
 	unique_ptr<token> t = context.get_token();
-	optional<vector<p_term>> goals;
+	vector<p_term> goals;
 
 	if (t->get_type() != symbol::query) {
 		if (t->get_type() != symbol::atom)
 			throw syntax_error(context.get_position(),
 				"unexpected character");
 		context.push(t);
-		return nullopt;
+		return goals;
 	}
 	// start a new scope
 	context.var_id.clear();
 	goals = many(context, parse_expression, symbol::comma);
-	if (!goals)
+	if (goals.empty())
 		throw syntax_error(context.get_position(),
 			"at least 1 goal is expected");
 	if (expect_period(context)->get_type() != symbol::period)
@@ -596,16 +594,15 @@ bool program()
 	interp_context context {cin};
 	optional<p_clause> c;
 	vector<p_clause> cs;
-	optional<vector<p_term>> q;
+	vector<p_term> q;
 	bool quit = false;
 
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {
-				cout << **c << endl;
 				cs.push_back(move(*c));
-			} else if ((q = parse_query(context))) {
-				solve(cs, *q, context.var_id.max());
+			} else if (!(q = parse_query(context)).empty()) {
+				solve(cs, q, context.var_id.max());
 			}
 			unique_ptr<token> t = context.get_token();
 			if (t->get_type() != symbol::eof)
