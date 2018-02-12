@@ -29,7 +29,7 @@ public:
 	node(const vector<p_clause> &_cls, binding_t &_binding,
 	     clause_iter fst, term_iter _goal, uint64_t _base, uint64_t &_top) :
 	     clauses{_cls}, binding{_binding}, first_clause{fst}, goal{_goal},
-	     base{_base}, top{_top} {}
+	     base{_base}, children_base{0}, top{_top} {}
 	node(const vector<p_clause> &_cls, binding_t &_binding,
 	     clause_iter fst, term_iter _goal,uint64_t _base,uint64_t &_top,
 	     term_iter b, node c):
