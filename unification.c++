@@ -6,36 +6,31 @@
 
 using namespace std;
 
-/*
- * unification.
- * unify 2 terms together, source variable ids are added by offset_source.
- * destination variable ids are incrementaed add offset_destination.
- */
-void undo_bindings(binding_t &binding, const vector<uint64_t> &undo_list)
+void remove_from_table(var_lookup &table, const vector<uint64_t> &list)
 {
-	if (undo_list.empty())
+	if (list.empty())
 		return;
-	for (auto undo : undo_list)
-		assert(binding.erase(undo) == 1);
+	for (auto item : list)
+		assert(table.erase(item) == 1);
 }
 
-const bind_t &walk_variable(const bind_t &value, const binding_t &binding)
+const bind_value &walk(const bind_value &value, const var_lookup &table)
 {
-	if (!holds_alternative<p_bind_value>(value))
+	if (!holds_alternative<p_structure>(value))
 		return value;
-	const p_bind_value &t = get<p_bind_value>(value);
+	const p_structure &t = get<p_structure>(value);
 	if (t->get_type() == symbol::variable) {
-		auto n = binding.find(t->get_id());
-		if (n != binding.end())
-			return walk_variable(n->second, binding);
+		auto n = table.find(t->get_id());
+		if (n != table.end())
+			return walk(n->second, table);
 	}
 	return value;
 }
 
 optional<vector<uint64_t>> unification(const p_term &, const p_term &,
-		uint64_t, uint64_t, binding_t &);
+		uint64_t, uint64_t, var_lookup &);
 optional<vector<uint64_t>>
-unify_rest(p_bind_value &src, p_bind_value &dst, binding_t &binding)
+unify_rest(p_structure &src, p_structure &dst, var_lookup &table)
 {
 	uint64_t srcoff = src->get_base(), dstoff = dst->get_base();
 	auto &srcvec = src->get_root()->get_rest(),
@@ -46,7 +41,7 @@ unify_rest(p_bind_value &src, p_bind_value &dst, binding_t &binding)
 	optional<vector<uint64_t>> r;
 
 	for (;ss != se && ds != de; ss ++, ds ++) {
-		if ((r = unification(*ss, *ds, srcoff, dstoff, binding))) {
+		if ((r = unification(*ss, *ds, srcoff, dstoff, table))) {
 			if (!r->empty())
 				all.insert(all.end(), r->begin(), r->end());
 		} else
@@ -55,37 +50,37 @@ unify_rest(p_bind_value &src, p_bind_value &dst, binding_t &binding)
 	if (ss == se && ds == de)
 		return move(all);
 failure:
-	undo_bindings(binding, all);
+	remove_from_table(table, all);
 	return nullopt;
 }
 
 inline bool
-is_wildcard(const unique_ptr<token> &a)
+wildcard(const unique_ptr<token> &a)
 {
 	return a->get_type() == symbol::variable && a->get_text() == "_";
 }
 
-// returns false if variable binding loop is detected.
-bool detect_loop(uint64_t id, const bind_t &value, const binding_t &binding)
+// returns false if variable table loop is detected.
+bool loop(uint64_t id, const bind_value &value, const var_lookup &table)
 {
-	if (!holds_alternative<p_bind_value>(value))
+	if (!holds_alternative<p_structure>(value))
 		return true;
-	const p_bind_value &t = get<p_bind_value>(value);
+	const p_structure &t = get<p_structure>(value);
 	const p_term &root = t->get_root();
 	uint64_t offset = t->get_base();
 
 	if (t->get_type() == symbol::variable) {
 		if (t->get_id() == id)
 			return false;
-		const bind_t &tmp = walk_variable(value, binding);
+		const bind_value &tmp = walk(value, table);
 		if (value == tmp)
 			return true;
-		return detect_loop(id, tmp, binding);
+		return loop(id, tmp, table);
 	} else {
 		assert(t->get_type() == symbol::atom);
 		for (const auto &i : root->get_rest()) {
-			bind_t ptmp {make_shared<bind_value>(i, offset)};
-			if (!detect_loop(id, ptmp, binding))
+			bind_value ptmp {make_shared<structure>(i, offset)};
+			if (!loop(id, ptmp, table))
 				return false;
 		}
 		return true;
@@ -93,27 +88,27 @@ bool detect_loop(uint64_t id, const bind_t &value, const binding_t &binding)
 	return true;
 }
 
-optional<uint64_t> bind(p_bind_value &from, bind_t to, binding_t &binding)
+optional<uint64_t> bind(p_structure &from, bind_value to, var_lookup &table)
 {
-	if (is_wildcard(from->get_root()->get_first()))
+	if (wildcard(from->get_root()->get_first()))
 		return 0;
 	uint64_t id = from->get_id();
 	assert(id != 0);
-	if (!holds_alternative<p_bind_value>(to)) {
-		binding.insert(make_pair(id, move(to)));
+	if (!holds_alternative<p_structure>(to)) {
+		table.insert(make_pair(id, move(to)));
 		return id;
 	}
-	const p_bind_value &t = get<p_bind_value>(to);
-	if (is_wildcard(t->get_root()->get_first()))
+	const p_structure &t = get<p_structure>(to);
+	if (wildcard(t->get_root()->get_first()))
 		return 0;
-	if (!detect_loop(id, to, binding))
+	if (!loop(id, to, table))
 		return nullopt;
-	binding.insert(make_pair(id, move(to)));
+	table.insert(make_pair(id, move(to)));
 	return id;
 }
 
 optional<vector<uint64_t>>
-unify_terms(p_bind_value &src, p_bind_value &dst, binding_t &binding)
+unify_terms(p_structure &src, p_structure &dst, var_lookup &table)
 {
 	optional<vector<uint64_t>> r;
 	vector<uint64_t> all;
@@ -121,21 +116,21 @@ unify_terms(p_bind_value &src, p_bind_value &dst, binding_t &binding)
 
 	assert(stype == symbol::atom && dtype == symbol::atom);
 	if (src->get_id() == dst->get_id() &&
-	    (r = unify_rest(src, dst, binding))) {
+	    (r = unify_rest(src, dst, table))) {
 		if (!r->empty())
 			all.insert(all.end(), r->begin(), r->end());
 		return all;
 	} else {
-		undo_bindings(binding, all);
+		remove_from_table(table, all);
 		return nullopt;
 	}
 }
 
 optional<vector<uint64_t>>
-unify_variable(p_bind_value &src, bind_t dst, binding_t &binding)
+unify_variable(p_structure &src, bind_value dst, var_lookup &table)
 {
 	vector<uint64_t> all;
-	optional<uint64_t> key = bind(src, move(dst), binding);
+	optional<uint64_t> key = bind(src, move(dst), table);
 	if (key) {
 		/* wildcard matching */
 		if (*key != 0)
@@ -147,22 +142,22 @@ unify_variable(p_bind_value &src, bind_t dst, binding_t &binding)
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-optional<vector<uint64_t>> unification_sub(bind_t src, bind_t dst,
-        binding_t &binding)
+optional<vector<uint64_t>> unification_sub(bind_value src, bind_value dst,
+        var_lookup &table)
 {
-	if (holds_alternative<p_bind_value>(src)) {
-		p_bind_value p = get<p_bind_value>(src);
+	if (holds_alternative<p_structure>(src)) {
+		p_structure p = get<p_structure>(src);
 		if (p->get_root()->get_first()->get_type() == symbol::variable)
-			return unify_variable(p, dst, binding);
+			return unify_variable(p, dst, table);
 	}
 	if (src.index() != dst.index())
 		return nullopt;
 	return visit(overloaded {
-		[&binding, &dst](p_bind_value s) {
-			p_bind_value &d = get<p_bind_value>(dst);
-			return unify_terms(s, d, binding);
+		[&table, &dst](p_structure s) {
+			p_structure &d = get<p_structure>(dst);
+			return unify_terms(s, d, table);
 		},
-		[&binding, &dst](int s) -> optional<vector<uint64_t>> {
+		[&table, &dst](int s) -> optional<vector<uint64_t>> {
 			vector<uint64_t> v;
 			int d = get<int>(dst);
 			if (d == s)
@@ -173,49 +168,49 @@ optional<vector<uint64_t>> unification_sub(bind_t src, bind_t dst,
 	}, src);
 }
 
-bind_t
-build_target(const p_term &root, uint64_t offset, binding_t &binding)
+bind_value
+build_target(const p_term &root, uint64_t offset, var_lookup &table)
 {
-	const bind_t newroot { make_shared<bind_value>(root, offset) };
-	const bind_t tmp = walk_variable(newroot, binding);
+	const bind_value newroot { make_shared<structure>(root, offset) };
+	const bind_value tmp = walk(newroot, table);
 	if (holds_alternative<int>(tmp))
 		return (tmp);
-	p_bind_value p = get<p_bind_value>(tmp);
+	p_structure p = get<p_structure>(tmp);
 	const unique_ptr<token> &t = p->get_root()->get_first();
 	if (t->get_type() == symbol::number)
-		return bind_t {t->get_value()};
+		return bind_value {t->get_value()};
 	return tmp;
 }
 
 optional<vector<uint64_t>>
 unification(const p_term &src, const p_term &dst, uint64_t srcoff,
-		uint64_t dstoff, binding_t &binding)
+		uint64_t dstoff, var_lookup &table)
 {
-	bind_t srctgt, dsttgt;
-	srctgt = build_target(src, srcoff, binding);
-	dsttgt = build_target(dst, dstoff, binding);
-	if (holds_alternative<p_bind_value>(srctgt)) {
-		p_bind_value p = get<p_bind_value>(srctgt);
+	bind_value srctgt, dsttgt;
+	srctgt = build_target(src, srcoff, table);
+	dsttgt = build_target(dst, dstoff, table);
+	if (holds_alternative<p_structure>(srctgt)) {
+		p_structure p = get<p_structure>(srctgt);
 		if (p->get_root()->get_first()->get_type() == symbol::variable)
 			return unification_sub(move(srctgt), move(dsttgt),
-					binding);
+					table);
 	}
-	return unification_sub(move(dsttgt), move(srctgt), binding);
+	return unification_sub(move(dsttgt), move(srctgt), table);
 }
 
 // test
 void
-print_term(const bind_t &value, const unordered_map<uint64_t, string> v,
-		const binding_t &binding)
+print_term(const bind_value &value, const unordered_map<uint64_t, string> v,
+		const var_lookup &table)
 {
-	const bind_t &n = walk_variable(value, binding);
+	const bind_value &n = walk(value, table);
 
 	if (holds_alternative<int>(n)) {
 		cout << get<int>(n);
 		return;
 	}
 
-	p_bind_value t = get<p_bind_value>(n);
+	p_structure t = get<p_structure>(n);
 
 	const unique_ptr<token> &first = t->get_root()->get_first();
 	const vector<p_term> &rest = t->get_root()->get_rest();
@@ -224,22 +219,22 @@ print_term(const bind_t &value, const unordered_map<uint64_t, string> v,
 	if (t->get_type() == symbol::atom && !rest.empty()) {
 		cout << "(";
 		for (auto &i : rest) {
-			p_bind_value a = make_shared<bind_value>(i, offset);
-			print_term(a, v, binding);
+			p_structure a = make_shared<structure>(i, offset);
+			print_term(a, v, table);
 		}
 		cout << ")";
 	}
 }
 
 void
-print_all(const unordered_map<uint64_t, string> &v, const binding_t &binding)
+print_all(const unordered_map<uint64_t, string> &v, const var_lookup &table)
 {
 	for (auto &i :v) {
-		auto n = binding.find(i.first);
-		if (n != binding.end()) {
-			auto &s = walk_variable(n->second, binding);
+		auto n = table.find(i.first);
+		if (n != table.end()) {
+			auto &s = walk(n->second, table);
 			cout << i.second << "=>";
-			print_term(s, v, binding);
+			print_term(s, v, table);
 			cout << endl;
 		}
 	}

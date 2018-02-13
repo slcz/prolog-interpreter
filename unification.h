@@ -13,24 +13,24 @@ namespace {
 	using std::variant;
 }
 
-class bind_value {
+class structure {
 private:
-	uint64_t offset;
+	uint64_t base;
 	const p_term &root;
 	uint64_t id() const { return root->get_first()->id; }
 public:
-	bind_value(const p_term &t, uint64_t o): offset {o}, root {t} {}
+	structure(const p_term &t, uint64_t b): base {b}, root {t} {}
 	symbol get_type() const { return root->get_first()->get_type(); }
 	uint64_t get_id() const { return get_type() == symbol::variable ?
-		offset + id() : id(); }
-	uint64_t get_base() const { return offset; }
+		base + id() : id(); }
+	uint64_t get_base() const { return base; }
 	const p_term &get_root() const { return root; }
 };
-using p_bind_value = shared_ptr<bind_value>;
-using bind_t = variant<int, p_bind_value>;
-using binding_t = unordered_map<uint64_t, bind_t>;
+using p_structure = shared_ptr<structure>;
+using bind_value = variant<int, p_structure>;
+using var_lookup = unordered_map<uint64_t, bind_value>;
 
 optional<vector<uint64_t>>
-unification(const p_term &, const p_term &, uint64_t, uint64_t, binding_t &);
-void undo_bindings(binding_t &, const vector<uint64_t> &);
-void print_all(const unordered_map<uint64_t, string> &, const binding_t &);
+unification(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &);
+void remove_from_table(var_lookup &, const vector<uint64_t> &);
+void print_all(const unordered_map<uint64_t, string> &, const var_lookup &);
