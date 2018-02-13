@@ -2,6 +2,7 @@
 #include <exception>
 #include <optional>
 #include <string>
+#include <sstream>
 #include "parser.h"
 #include "interpreter.h"
 
@@ -138,7 +139,7 @@ struct token_parser_entry {
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
 	{regex("^[#$&*+-./:<=>?@^~\\\\]+"),     symbol::atom    },
-	{regex(R"(^'(\\.|[^'\\])*')"),          symbol::atom    },
+	{regex(R"(^'(\\.|[^'])*')"),            symbol::string  },
 	{regex(R"(^'.*)"),                      symbol::append  },
 	{regex("^[_$[:upper:]][_$[:alnum:]]*"), symbol::variable},
 	{regex("^."),                           symbol::error   }
@@ -163,7 +164,7 @@ parse_token(const string::iterator begin, const string::iterator end)
 class interp_context {
 	using transformer_t = unique_ptr<token> (*)(std::unique_ptr<token>);
 private:
-	istream &in;
+	vector<istream *> ins;
 	string str;
 	size_t offset;
 	vector<unique_ptr<token>> token_stack;
@@ -178,7 +179,7 @@ private:
 	}
 	position_t position;
 public:
-	interp_context(istream &is): in{is}, offset{0}, position{0,0} {}
+	interp_context(vector<istream *>is):ins{is}, offset{0}, position{0,0} {}
 	unique_id atom_id;
 	unique_id var_id;
 	unique_ptr<token> get_token();
@@ -199,14 +200,22 @@ unique_ptr<token> interp_context::_get_token()
 
 	next = make_unique<token>(symbol::none);
 	do {
-		while (str.begin() + offset == str.end()) {
-			if (!getline(in, str))
-				next = make_unique<token>(symbol::eof);
-			else {
-				offset = 0;
-				position.first ++;
-				position.second = 1;
+		while (str.begin() + offset == str.end() &&
+		       next->get_type() == symbol::none) {
+			while (true) {
+				if (ins.empty()) {
+					next = make_unique<token>(symbol::eof);
+					break;
+				} else if (getline(*(ins.back()), str))
+					break;
+				else {
+					position.first = 0;
+					ins.pop_back();
+				}
 			}
+			offset = 0;
+			position.first ++;
+			position.second = 1;
 		}
 		token_position = position;
 		if (next->get_type() != symbol::eof) {
@@ -214,7 +223,7 @@ unique_ptr<token> interp_context::_get_token()
 			next = parse_token(str.begin() + offset, str.end());
 			while (next->get_type() == symbol::append) {
 				string line_continue;
-				if (!getline(in, line_continue))
+				if (!getline(*(ins.back()), line_continue))
 					next->set_type(symbol::error);
 				else {
 					str += '\n' + line_continue;
@@ -239,6 +248,25 @@ unique_ptr<token> interp_context::get_token()
 	auto t = _get_token();
 	for (auto transformer : transformers)
 		t = transformer(move(t));
+	return t;
+}
+
+unique_ptr<token> string_transformer(unique_ptr<token> t)
+{
+	string r;
+	bool escape = false;
+	if (t->get_type() == symbol::string) {
+		string o = t->get_text();
+		assert(o.length() >= 2);
+		o = o.substr(1, o.length() - 2);
+		for (char c : o) {
+			if (!escape)
+				r.push_back(c);
+			escape = c == '\\';
+		}
+		t->set_text(r);
+		t->set_type(symbol::atom);
+	}
 	return t;
 }
 
@@ -361,6 +389,11 @@ exp_return check_op(exp_param &param,
 exp_return parse_exp_prefix(exp_param &param, op_t &op, exp_return &r)
 {
 	optional<p_term> p;
+	if (!op.prefix()) {
+		r.ok = false;
+		param.context.push(r.tok);
+		return move(r);
+	}
 	if (op.noassoc())
 		p = parse_exp_next(param.context, param.priority);
 	else
@@ -379,10 +412,15 @@ exp_return parse_exp_prefix(exp_param &param, op_t &op, exp_return &r)
 exp_return parse_exp_infix_postfix(exp_param &param, op_t &op, exp_return &r)
 {
 	optional<p_term> p;
+	if (op.prefix()) {
+		r.ok = false;
+		param.context.push(r.tok);
+		return move(r);
+	}
 	if (op.infix()) {
-		if (op.lassoc())
+		if (op.lassoc() || op.noassoc()) {
 			p = parse_exp_next(param.context, param.priority);
-		else
+		} else
 			p = parse_exp(param.context, param.priority);
 		if (!p)
 			goto fail;
@@ -594,12 +632,17 @@ void scan_vars(const p_term &t, uint64_t base,
 
 bool program()
 {
-	interp_context context {cin};
+	vector<istream *> ios;
+	stringstream s = stringstream {builtin_predicates};
+	ios.push_back(&cin);
+	ios.push_back(&s);
+	interp_context context {ios};
 	optional<p_clause> c;
 	vector<p_clause> cs;
 	vector<p_term> q;
 	bool quit = false;
 
+	context.ins_transformer(string_transformer);
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {

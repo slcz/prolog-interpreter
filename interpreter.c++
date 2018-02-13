@@ -15,7 +15,7 @@ using term_iter = vector<p_term>::const_iterator;
 class node {
 private:
 	const vector<p_clause> &clauses;
-	var_lookup        &table;
+	var_lookup       &table;
 	clause_iter      first_clause;
 	term_iter        goal;
 	term_iter        last_child;

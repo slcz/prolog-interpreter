@@ -147,6 +147,7 @@ optional<vector<uint64_t>> unification_sub(bind_value src, bind_value dst,
 {
 	if (holds_alternative<p_structure>(src)) {
 		p_structure p = get<p_structure>(src);
+		assert(p);
 		if (p->get_root()->get_first()->get_type() == symbol::variable)
 			return unify_variable(p, dst, table);
 	}
@@ -187,15 +188,21 @@ unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 		uint64_t dstoff, var_lookup &table)
 {
 	bind_value srctgt, dsttgt;
+	optional<vector<uint64_t>> r;
+	bool done = false;
 	srctgt = build_target(src, srcoff, table);
 	dsttgt = build_target(dst, dstoff, table);
 	if (holds_alternative<p_structure>(srctgt)) {
 		p_structure p = get<p_structure>(srctgt);
-		if (p->get_root()->get_first()->get_type() == symbol::variable)
-			return unification_sub(move(srctgt), move(dsttgt),
-					table);
+		if (p->get_root()->get_first()->get_type() == symbol::variable){
+			r = unification_sub(move(srctgt),move(dsttgt),table);
+			done = true;
+		}
 	}
-	return unification_sub(move(dsttgt), move(srctgt), table);
+	if (!done)
+		r = unification_sub(move(dsttgt), move(srctgt), table);
+
+	return r;
 }
 
 // test

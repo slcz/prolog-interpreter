@@ -24,7 +24,9 @@ namespace {
 	using std::unordered_map;
 }
 
-enum class symbol { none, atom, ignore, append, number,
+extern string builtin_predicates;
+
+enum class symbol { none, atom, ignore, append, number, string,
                     variable, error, lparen, rparen,
 	            eof, query, rules, comma, period };
 using position_t = std::pair<uint32_t, uint32_t>;
@@ -47,7 +49,6 @@ public:
 		std::smatch m;
 		if (regex_search(begin, end, m, pat)) {
 			token_type = type;
-			assert(m.size() == 1);
 			text = m.begin()->str();
 			return true;
 		} else {
@@ -55,6 +56,7 @@ public:
 			return false;
 		}
 	}
+	void set_text(string t) { text = t; }
 	const string &get_text() const { return text; }
 	symbol get_type() const { return token_type; }
 	void set_type(const symbol type) { token_type = type; }
