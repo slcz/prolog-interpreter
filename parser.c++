@@ -263,7 +263,7 @@ operator<<(ostream& os, const term& c)
 {
 	symbol type = c.first->get_type();
 	string p = type == symbol::atom ? "A" :
-	           type == symbol::variable ? "V" : "?";
+	           type == symbol::variable ? "V" : "N";
 	int ident = c.ident;
 	for (int i = 0; i < ident; i ++)
 		os << " ";
@@ -450,7 +450,10 @@ optional<p_term> parse_term(interp_context &context)
 	vector<p_term> rest;
 
 	t = context.get_token();
-	if (t->get_type() == symbol::atom) {
+	if (t->get_type() == symbol::number) {
+		t->set_value(stoi(t->get_text()));
+		r = make_unique<term>(move(t));
+	} else if (t->get_type() == symbol::atom) {
 		uint64_t id = context.atom_id.get_id(t->get_text());
 		t->id = id;
 		unique_ptr<token> next = context.get_token();
@@ -589,15 +592,6 @@ void scan_vars(const p_term &t, uint64_t base,
 	}
 }
 
-unique_ptr<token> number_transformer(unique_ptr<token> t)
-{
-	if (t->get_type() == symbol::number) {
-		t->set_intvalue(stoi(t->get_text()));
-		t->set_type(symbol::atom);
-	}
-	return t;
-}
-
 bool program()
 {
 	interp_context context {cin};
@@ -606,7 +600,6 @@ bool program()
 	vector<p_term> q;
 	bool quit = false;
 
-	context.ins_transformer(number_transformer);
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {

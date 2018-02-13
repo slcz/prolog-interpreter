@@ -34,14 +34,13 @@ private:
 	string text;
 	symbol token_type;
 	position_t position;
-	int intvalue;
+	int value;
 	bool isint;
 public:
 	token(symbol type) : token_type { type } {}
 	token() : token(symbol::error) {}
-	void set_intvalue(int value) { intvalue = value; isint = true;}
-	bool is_intvalue() { return isint; }
-	int get_intvalue() { return intvalue; }
+	void set_value(int v) { value = v;}
+	int  get_value() { return value; }
 	bool match(string::const_iterator begin,
 			string::const_iterator end,
 			const regex &pat, symbol type) {

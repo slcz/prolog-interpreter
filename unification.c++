@@ -182,8 +182,8 @@ build_target(const p_term &root, uint64_t offset, binding_t &binding)
 		return (tmp);
 	p_bind_value p = get<p_bind_value>(tmp);
 	const unique_ptr<token> &t = p->get_root()->get_first();
-	if (t->is_intvalue())
-		return bind_t {t->get_intvalue()};
+	if (t->get_type() == symbol::number)
+		return bind_t {t->get_value()};
 	return tmp;
 }
 
