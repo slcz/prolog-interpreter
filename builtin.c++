@@ -9,8 +9,8 @@
 
 using namespace std;
 
-using builtin_fn = optional<vector<uint64_t>> (*)(const vector<p_term> &,
-		uint64_t, var_lookup &);
+using builtin_fn = optional<pair<control, vector<uint64_t>>> (*)(
+      const vector<p_term> &, uint64_t, var_lookup &);
 
 using arith_type = variant<int, float>;
 
@@ -137,8 +137,8 @@ optional<arith_type> eval_arith(bind_value root, var_lookup &table)
 	} }, root);
 }
 
-optional<vector<uint64_t>> builtin_compare(const vector<p_term> &args,
-    uint64_t base, var_lookup &table,
+optional<pair<control, vector<uint64_t>>>
+builtin_compare(const vector<p_term> &args, uint64_t base, var_lookup &table,
     function<bool(int,int)> intf, function<bool(float,float)> floatf)
 {
 	bind_value l = build_target(args[0], base, table);
@@ -155,52 +155,54 @@ optional<vector<uint64_t>> builtin_compare(const vector<p_term> &args,
 	if (holds_alternative<int>(*comp)) {
 		int res = get<int>(*comp);
 		if (res)
-			return vector<uint64_t>();
-		else
-			return nullopt;
+			return make_pair(control::none, vector<uint64_t>());
 	}
 	return nullopt;
 }
 
-optional<vector<uint64_t>> builtin_eq(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_eq(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
 	return builtin_compare(args, base, table, equal_to<>(), equal_to<>());
 }
 
-optional<vector<uint64_t>> builtin_ne(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_ne(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
-	return builtin_compare(args, base, table, not_equal_to<>(), not_equal_to<>());
+	return builtin_compare(args, base, table, not_equal_to<>(),
+			not_equal_to<>());
 }
 
-optional<vector<uint64_t>> builtin_lt(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_lt(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
-	return builtin_compare(args, base, table, equal_to<>(), equal_to<>());
+	return builtin_compare(args, base, table, less<>(), less<>());
 }
 
-optional<vector<uint64_t>> builtin_le(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_le(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
-	return builtin_compare(args, base, table, less_equal<>(), less_equal<>());
+	return builtin_compare(args, base, table, less_equal<>(),
+			less_equal<>());
 }
 
-optional<vector<uint64_t>> builtin_gt(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_gt(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
 	return builtin_compare(args, base, table, greater<>(), greater<>());
 }
 
-optional<vector<uint64_t>> builtin_ge(const vector<p_term> &args,
-    uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_ge(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
-	return builtin_compare(args, base, table, greater_equal<>(), greater_equal<>());
+	return builtin_compare(args, base, table, greater_equal<>(),
+			greater_equal<>());
 }
 
-optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
-		uint64_t base, var_lookup &table)
+optional<pair<control, vector<uint64_t>>>
+builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
+	vector<uint64_t> nil = vector<uint64_t>();
 	bind_value l = build_target(args[0], base, table);
 	bind_value r = build_target(args[1], base, table);
 	optional<arith_type> result = eval_arith(r, table);
@@ -209,22 +211,35 @@ optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
 	bind_value b = visit(overloaded {
 	[](int v)   { return bind_value {v}; },
 	[](float v) { return bind_value {v}; } }, *result);
-	return unification_sub(l, b, table);
+	auto unify_rst = unification_sub(l, b, table);
+	if (!unify_rst)
+		return nullopt;
+	else
+		return make_pair(control::none, move(*unify_rst));
+}
+
+optional<pair<control, vector<uint64_t>>>
+non_provable(const vector<p_term> &args, uint64_t base, var_lookup &table)
+{
+	return make_pair(control::logical_not, vector<uint64_t>());
 }
 
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
-	{ "is", {builtin_is, 2}},
-	{ "=:=",{builtin_eq, 2}},
-	{ "=\\=",{builtin_ne, 2}},
-	{ "<",  {builtin_lt, 2}},
-	{ ">",  {builtin_gt, 2}},
-	{ "=<", {builtin_le, 2}},
-	{ ">=", {builtin_ge, 2}},
+	{ "is",   {builtin_is,    2}},
+	{ "=:=",  {builtin_eq,    2}},
+	{ "=\\=", {builtin_ne,    2}},
+	{ "<",    {builtin_lt,    2}},
+	{ ">",    {builtin_gt,    2}},
+	{ "=<",   {builtin_le,    2}},
+	{ ">=",   {builtin_ge,    2}},
+	{ "\\+",  {non_provable,  1}},
 };
 
-optional<vector<uint64_t>>
+optional<pair<control, vector<uint64_t>>>
 builtin(const p_term &src, uint64_t srcoff, var_lookup &table)
 {
+	vector<uint64_t> nil = vector<uint64_t>();
+
 	bind_value srctgt = build_target(src, srcoff, table);
 	if (!holds_alternative<p_structure>(srctgt))
 		return nullopt;
@@ -237,9 +252,8 @@ builtin(const p_term &src, uint64_t srcoff, var_lookup &table)
 	if (m == builtin_map.end())
 		return nullopt;
 	builtin_fn f = m->second.first;
-	if (m->second.second != rest.size())
+	if (m->second.second != rest.size() || !f)
 		return nullopt;
-	if (!f)
-		return nullopt;
-	return f(rest, srcoff, table);
+	auto r = f(rest, srcoff, table);
+	return r;
 }

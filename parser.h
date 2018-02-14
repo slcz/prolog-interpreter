@@ -11,6 +11,7 @@
 #include <set>
 #include <unordered_map>
 #include "unique-id.h"
+#include "builtin-prolog.h"
 
 namespace {
 	using std::istream;

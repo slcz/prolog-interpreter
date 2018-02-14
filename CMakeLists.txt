@@ -6,4 +6,4 @@ set (prolog_VERSION_MAJOR 0)
 set (prolog_VERSION_MINOR 1)
 add_executable(prolog main.c++ unification.c++ parser.c++
 	parser.h unique-id.h unification-test.c++ interpreter.c++ interpreter.h
-	unification.h builtin.c++ unification-priv.h)
+	unification.h builtin.c++ unification-priv.h builtin-prolog.h)

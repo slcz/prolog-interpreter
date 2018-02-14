@@ -195,6 +195,30 @@ build_target(const p_term &root, uint64_t offset, var_lookup &table)
 	return tmp;
 }
 
+bool
+can_unwrap(const p_term &t, uint64_t base, var_lookup &table)
+{
+	auto r = build_target(t, base, table);
+
+	if (!holds_alternative<p_structure>(r))
+		return false;
+	auto m = get<p_structure>(r);
+	if (m->get_root()->get_first()->get_type() != symbol::atom)
+		return false;
+	auto & n = m->get_root()->get_rest();
+	return n.size() == 1;
+}
+
+const p_term &
+unwrap(const p_term &t, uint64_t base, var_lookup &table)
+{
+	auto r = build_target(t, base, table);
+
+	auto m = get<p_structure>(r);
+	auto & n = m->get_root()->get_rest();
+	return n[0];
+}
+
 optional<vector<uint64_t>>
 unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 		uint64_t dstoff, var_lookup &table)

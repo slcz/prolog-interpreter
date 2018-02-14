@@ -25,11 +25,13 @@ private:
 	uint64_t         &top;
 	vector<node>     children;
 	void expand(vector<uint64_t>);
+	control          flags;
+	bool             _solve();
 public:
 	node(const vector<p_clause> &_cls, var_lookup &_table,
 	     clause_iter fst, term_iter _goal, uint64_t _base, uint64_t &_top) :
 	     clauses{_cls}, table{_table}, first_clause{fst}, goal{_goal},
-	     base{_base}, children_base{0}, top{_top} {}
+	     base{_base}, children_base{0}, top{_top}, flags{control::none} {}
 	node(const vector<p_clause> &_cls, var_lookup &_table,
 	     clause_iter fst, term_iter _goal,uint64_t _base,uint64_t &_top,
 	     term_iter b, node c):
@@ -72,15 +74,25 @@ bool node::try_unification()
 		return false;
 	auto u = builtin(*goal, base, table);
 	if (u) {
-		bound_vars = move(*u);
-		first_clause = clauses.end();
-		return true;
+		flags = u->first;
+		if (flags != control::logical_not) {
+			auto u2 = u->second;
+			if (!u2.empty())
+				bound_vars = move(u2);
+			first_clause = clauses.end();
+			return true;
+		}
+	}
+	assert(*goal);
+	if (flags == control::logical_not && !can_unwrap(*goal, base, table)) {
+		f = clauses.end();
+		return false;
 	}
 	/* try unification */
 	for (; f != clauses.end(); f ++) {
-		assert(*goal);
 		assert((*f)->head);
-		auto u = unification((*f)->head, *goal, t, base, table);
+		auto u = unification((*f)->head, flags == control::logical_not?
+		    unwrap(*goal, base, table) : *goal, t, base, table);
 		if (u) {
 			expand(move(*u));
 			return true;
@@ -89,7 +101,7 @@ bool node::try_unification()
 	return false;
 }
 
-bool node::solve()
+bool node::_solve()
 {
 	while (true) {
 		if (children.empty()) {
@@ -112,6 +124,17 @@ bool node::solve()
 				children.pop_back();
 		}
 	}
+}
+
+bool node::solve()
+{
+	bool r = _solve();
+	control f = flags;
+	if (f == control::logical_not)
+		flags = control::none;
+	if ((f == control::logical_not) && r)
+		remove_from_table(table, bound_vars);
+	return (f == control::logical_not) ^ r;
 }
 
 bool

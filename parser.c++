@@ -113,6 +113,7 @@ public:
 		{ ">",   { assoc_t::xfx, 700 }},
 		{ ">=",  { assoc_t::xfx, 700 }},
 		{ "=..", { assoc_t::xfx, 700 }},
+		{ "\\+", { assoc_t::fy,  900 }},
 		{ ",",   { assoc_t::xfy,1000 }},
 		{ "->",  { assoc_t::xfy,1050 }},
 		{ ";",   { assoc_t::xfy,1100 }},
@@ -701,7 +702,9 @@ void scan_vars(const p_term &t, uint64_t base,
 bool program()
 {
 	vector<istream *> ios;
+	stringstream builtin_predicates {builtin_list};
 	ios.push_back(&cin);
+	ios.push_back(&builtin_predicates);
 	interp_context context {ios};
 	optional<p_clause> c;
 	vector<p_clause> cs;
@@ -712,7 +715,6 @@ bool program()
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {
-				cout << **c << endl;
 				cs.push_back(move(*c));
 			} else if (!(q = parse_query(context)).empty()) {
 				solve(cs, q, context.var_id.max());
