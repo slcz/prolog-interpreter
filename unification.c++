@@ -270,24 +270,6 @@ optional<arith_type> idiv(vector<arith_type> args) {
 optional<arith_type> mod(vector<arith_type> args) {
 	return binary_op<int,float>(args[0], args[1], modulus<>(), nullptr); }
 
-optional<arith_type> eq(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], equal_to<>(), equal_to<>()); }
-
-optional<arith_type> ne(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], not_equal_to<>(), not_equal_to<>()); }
-
-optional<arith_type> gt(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], greater<>(), greater<>()); }
-
-optional<arith_type> lt(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], less<>(), less<>()); }
-
-optional<arith_type> ge(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], greater_equal<>(), greater_equal<>()); }
-
-optional<arith_type> le(vector<arith_type> args) {
-	return binary_op<bool,bool>(args[0], args[1], less_equal<>(), less_equal<>()); }
-
 using mtype = unordered_multimap<string,
       pair<optional<arith_type>(*)(vector<arith_type>), uint32_t>>;
 
@@ -299,12 +281,6 @@ mtype arith_ops = {
 	{ "/",   {div, 2}},
 	{ "//",  {idiv,2}},
 	{ "mod", {mod, 2}},
-	{ "=:=", {eq,  2}},
-	{ "=\\=",{ne,  2}},
-	{ "<",   {lt,  2}},
-	{ ">",   {gt,  2}},
-	{ ">=",  {ge,  2}},
-	{ "=<",  {le,  2}}
 };
 
 optional<arith_type> eval_arith(bind_value, var_lookup &);
