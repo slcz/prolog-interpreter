@@ -278,12 +278,37 @@ optional<arith_type> div(vector<arith_type> args)
 	return nullopt;
 }
 
+optional<arith_type> idiv(vector<arith_type> args)
+{
+	if (args.size() == 2 &&
+		holds_alternative<int>(args[0]) &&
+		holds_alternative<int>(args[1]))
+		return div(args);
+	return nullopt;
+}
+
+optional<arith_type> mod(vector<arith_type> args)
+{
+	if (args.size() == 2 &&
+		holds_alternative<int>(args[0]) &&
+		holds_alternative<int>(args[1])) {
+		int a0 = get<int>(args[0]);
+		int a1 = get<int>(args[1]);
+		if (a1 == 0)
+			return nullopt;
+		return a0 % a1;
+	}
+	return nullopt;
+}
+
 unordered_map<string, optional<arith_type>(*)(vector<arith_type>)>
 arith_ops = {
-	{ "+", add},
-	{ "-", sub},
-	{ "*", mul},
-	{ "/", div},
+	{ "+",   add},
+	{ "-",   sub},
+	{ "*",   mul},
+	{ "/",   div},
+	{ "//",  idiv},
+	{ "mod", mod},
 };
 
 optional<arith_type> eval_arith(bind_value, var_lookup &);
@@ -333,13 +358,39 @@ optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
 	if (!result)
 		return nullopt;
 	bind_value b = visit(overloaded {
-	[](int v) { return bind_value {v}; },
+	[](int v)   { return bind_value {v}; },
 	[](float v) { return bind_value {v}; } }, *result);
 	return unification_sub(l, b, table);
 }
 
+#if 0
+optional<vector<uint64_t>> builtin_compare(
+		const vector<p_term> &args,
+		uint64_t base, var_lookup &table)
+{
+	bind_value l = build_target(args[0], base, table);
+	bind_value r = build_target(args[1], base, table);
+	optional<arith_type> lr = eval_arith(l, table);
+	optional<arith_type> rr = eval_arith(r, table);
+	if (!result)
+		return nullopt;
+	bind_value b = visit(overloaded {
+	[](int v)   { return bind_value {v}; },
+	[](float v) { return bind_value {v}; } }, *result);
+	return unification_sub(l, b, table);
+}
+#endif
+
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
-	{ "is", {builtin_is, 2}}
+	{ "is", {builtin_is, 2}},
+#if 0
+	{ "=:=",{builtin_eq, 2}},
+	{ "=\=",{builtin_ne, 2}},
+	{ "<",  {builtin_lt, 2}},
+	{ ">",  {builtin_gt, 2}},
+	{ "=<", {builtin_le, 2}},
+	{ ">=", {builtin_ge, 2}},
+#endif
 };
 
 optional<vector<uint64_t>>
