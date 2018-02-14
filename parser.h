@@ -25,8 +25,8 @@ namespace {
 }
 
 enum class symbol { none, atom, ignore, append, integer, decimal, string,
-                    variable, error, lparen, rparen,
-	            eof, query, rules, comma, period };
+                    variable, error, lparen, rparen, lbracket, rbracket,
+	            eof, query, rules, comma, period, vbar };
 using position_t = std::pair<uint32_t, uint32_t>;
 
 class token {

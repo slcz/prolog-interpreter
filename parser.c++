@@ -135,6 +135,10 @@ struct token_parser_entry {
 	{regex(R"(^/\*[\S\s]*?\*/)"),           symbol::ignore  },
 	{regex(R"(^/\*.*)"),                    symbol::append  },
 	{regex("^,"),                           symbol::comma   },
+	{regex("^\\|"),                         symbol::vbar    },
+	{regex(R"(^\[\])"),                     symbol::atom    },
+	{regex("^\\["),                         symbol::lbracket},
+	{regex("^\\]"),                         symbol::rbracket},
 	{regex("^\\("),                         symbol::lparen  },
 	{regex("^\\)"),                         symbol::rparen  },
 	{regex("^[[:digit:]]+\\.[[:digit:]]+"), symbol::decimal },
@@ -500,6 +504,46 @@ parse_expression(interp_context &context)
 	return parse_exp(context, low);
 }
 
+optional<p_term> parse_list(interp_context &context)
+{
+	unique_ptr<token> t;
+	optional<p_term> rtn;
+	p_term lnode, rnode;
+	if ((rtn = parse_expression(context))) {
+		lnode = move(*rtn);
+		t = context.get_token();
+		if (t && t->get_type() == symbol::rbracket) {
+			auto n = make_unique<token>(symbol::atom);
+			n->set_text("[]");
+			rnode = make_unique<term>(move(n));
+		} else if (t && t->get_type() == symbol::vbar) {
+			auto n = parse_expression(context);
+			if (!n)
+				throw syntax_error(context.get_position(),
+						"expression expected");
+			rnode = move(*n);
+			if (context.get_token()->get_type()!= symbol::rbracket)
+				throw syntax_error(context.get_position(),
+						"] expected");
+		} else if (t && t->get_type() == symbol::comma) {
+			rtn = parse_list(context);
+			if (!rtn)
+				throw syntax_error(context.get_position(),
+						"expression expected");
+			rnode = move(*rtn);
+		} else
+			throw syntax_error(context.get_position(),
+					"list parse error");
+		auto n = make_unique<token>(symbol::atom);
+		vector<p_term> v;
+		v.push_back(move(lnode));
+		v.push_back(move(rnode));
+		n->set_text(".");
+		return make_unique<term>(move(n), move(v));
+	} else
+		throw syntax_error(context.get_position(), "list expected");
+}
+
 optional<p_term> parse_term(interp_context &context)
 {
 	optional<p_term> r;
@@ -507,7 +551,9 @@ optional<p_term> parse_term(interp_context &context)
 	vector<p_term> rest;
 
 	t = context.get_token();
-	if (t->get_type() == symbol::decimal) {
+	if (t->get_type() == symbol::lbracket) {
+		return parse_list(context);
+	} else if (t->get_type() == symbol::decimal) {
 		t->set_decimal_value(stof(t->get_text()));
 		r = make_unique<term>(move(t));
 	} else if (t->get_type() == symbol::integer) {
@@ -666,6 +712,7 @@ bool program()
 	while (!quit) {
 		try {
 			if ((c = parse_clause(context))) {
+				cout << **c << endl;
 				cs.push_back(move(*c));
 			} else if (!(q = parse_query(context)).empty()) {
 				solve(cs, q, context.var_id.max());
