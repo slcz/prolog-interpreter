@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cstdint>
+#include <functional>
 #include "parser.h"
 #include "unification.h"
 
@@ -199,116 +200,98 @@ using builtin_fn = optional<vector<uint64_t>> (*)(const vector<p_term> &,
 
 using arith_type = variant<int, float>;
 
+
+optional<arith_type> unary_op(arith_type a0,
+    function<int(int)> intf, function<float(float)> floatf)
+{
+	if (!intf) {
+		if (!holds_alternative<float>(a0))
+			return nullopt;
+	}
+	if (!floatf) {
+		if (!holds_alternative<int>(a0))
+			return nullopt;
+	}
+	return visit(overloaded {
+	[&] (int a0)   -> arith_type { return intf(a0);   },
+	[&] (float a0) -> arith_type { return floatf(a0); }
+	}, a0);
+}
+
+optional<arith_type> binary_op(arith_type a0, arith_type a1,
+    function<int(int,int)> intf, function<float(float,float)> floatf)
+{
+	if (!intf) {
+		if (!holds_alternative<float>(a0) ||
+		    !holds_alternative<float>(a1))
+			return nullopt;
+	}
+	if (!floatf) {
+		if (!holds_alternative<int>(a0) ||
+		    !holds_alternative<int>(a1))
+			return nullopt;
+	}
+	return visit(overloaded {
+	[&] (int a0) -> arith_type {
+		return visit(overloaded {
+			[&] (int a1) { return arith_type {intf(a0,a1)}; },
+			[&] (float a1){return arith_type {floatf(a0,a1)}; }},
+			a1);
+	},
+	[&] (float a0) -> arith_type {
+		return visit(overloaded {
+			[&] (int a1) { return arith_type { floatf(a0,a1) }; },
+			[&] (float a1){ return arith_type { floatf(a0,a1)}; }},
+			a1);
+	} }, a0);
+}
+
 optional<arith_type> add(vector<arith_type> args)
 {
-	if (args.size() != 2)
-		return nullopt;
-	return visit(overloaded {
-	[&] (int a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 +a2};},
-			[&] (float a2) {return arith_type { a1 +a2};}},args[1]);
-	},
-	[&] (float a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 +a2};},
-			[&] (float a2) {return arith_type { a1 +a2};}},args[1]);
-	} }, args[0]);
+	return binary_op(args[0], args[1], plus<>(), plus<>());
+}
+
+optional<arith_type> neg(vector<arith_type> args)
+{
+	return unary_op(args[0], negate<>(), negate<>());
 }
 
 optional<arith_type> sub(vector<arith_type> args)
 {
-	if (args.size() == 1)
-	return visit(overloaded {
-	[&] (int a1) -> arith_type { return -a1; },
-	[&] (float a1) -> arith_type { return -a1; }
-	}, args[0]);
-	if (args.size() == 2)
-	return visit(overloaded {
-	[&] (int a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 -a2};},
-			[&] (float a2) {return arith_type { a1 -a2};}},args[1]);
-	},
-	[&] (float a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 -a2};},
-			[&] (float a2) {return arith_type { a1 -a2};}},args[1]);
-	} }, args[0]);
-	return nullopt;
+	return binary_op(args[0], args[1], minus<>(), minus<>());
 }
 
 optional<arith_type> mul(vector<arith_type> args)
 {
-	if (args.size() == 2)
-	return visit(overloaded {
-	[&] (int a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 *a2};},
-			[&] (float a2) {return arith_type { a1 *a2};}},args[1]);
-	},
-	[&] (float a1) -> arith_type {
-		return visit(overloaded {
-			[&] (int a2)   {return arith_type { a1 *a2};},
-			[&] (float a2) {return arith_type { a1 *a2};}},args[1]);
-	} }, args[0]);
-	return nullopt;
+	return binary_op(args[0], args[1], multiplies<>(), multiplies<>());
 }
 
 optional<arith_type> div(vector<arith_type> args)
 {
-	if (args.size() == 2)
-	return visit(overloaded {
-	[&] (int a1) -> optional<arith_type> {
-		return visit(overloaded {
-			[&] (int a2) ->optional<arith_type>  { if (a2 == 0) return nullopt;
-			return arith_type { a1 / a2};},
-			[&] (float a2) -> optional<arith_type> { if (a2 == 0.0) return nullopt;
-			return arith_type { a1 / a2};}},args[1]);
-	},
-	[&] (float a1) -> optional<arith_type> {
-		return visit(overloaded {
-			[&] (int a2) -> optional<arith_type>
-			{ if (a2 == 0) return nullopt;
-			return arith_type {a1 / a2};},
-			[&] (float a2) -> optional<arith_type>
-			{ if (a2 == 0.0) return nullopt;
-			return arith_type { a1 / a2};}},args[1]);
-	} }, args[0]);
-	return nullopt;
+	return binary_op(args[0], args[1], divides<>(), divides<>());
 }
 
 optional<arith_type> idiv(vector<arith_type> args)
 {
-	if (args.size() == 2 &&
-		holds_alternative<int>(args[0]) &&
-		holds_alternative<int>(args[1]))
-		return div(args);
-	return nullopt;
+	return binary_op(args[0], args[1], divides<>(), nullptr);
 }
 
 optional<arith_type> mod(vector<arith_type> args)
 {
-	if (args.size() == 2 &&
-		holds_alternative<int>(args[0]) &&
-		holds_alternative<int>(args[1])) {
-		int a0 = get<int>(args[0]);
-		int a1 = get<int>(args[1]);
-		if (a1 == 0)
-			return nullopt;
-		return a0 % a1;
-	}
-	return nullopt;
+	return binary_op(args[0], args[1], modulus<>(), nullptr);
 }
 
-unordered_map<string, optional<arith_type>(*)(vector<arith_type>)>
-arith_ops = {
-	{ "+",   add},
-	{ "-",   sub},
-	{ "*",   mul},
-	{ "/",   div},
-	{ "//",  idiv},
-	{ "mod", mod},
+using mtype = unordered_multimap<string,
+      pair<optional<arith_type>(*)(vector<arith_type>), uint32_t>>;
+
+mtype arith_ops = {
+	{ "+",   {add, 2}},
+	{ "-",   {sub, 2}},
+	{ "-",   {neg, 1}},
+	{ "*",   {mul, 2}},
+	{ "/",   {div, 2}},
+	{ "//",  {idiv,2}},
+	{ "mod", {mod, 2}},
 };
 
 optional<arith_type> eval_arith(bind_value, var_lookup &);
@@ -329,10 +312,13 @@ optional<arith_type> eval_arith_sub(p_structure s, var_lookup &table)
 			return nullopt;
 		args.push_back(move(*a));
 	}
-	auto m = arith_ops.find(op);
-	if (m == arith_ops.end())
-		return nullopt;
-	return m->second(args);
+	auto m = arith_ops.equal_range(op);
+	auto p = m.first;
+	while (p != m.second) {
+		if (p->second.second == args.size())
+			return p->second.first(args);
+	}
+	return nullopt;
 }
 
 optional<arith_type> eval_arith(bind_value root, var_lookup &table)
