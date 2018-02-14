@@ -165,6 +165,14 @@ optional<vector<uint64_t>> unification_sub(bind_value src, bind_value dst,
 				return move(v);
 			else
 				return nullopt;
+		},
+		[&table, &dst](float s) -> optional<vector<uint64_t>> {
+			vector<uint64_t> v;
+			int d = get<float>(dst);
+			if (d == s)
+				return move(v);
+			else
+				return nullopt;
 		}
 	}, src);
 }
@@ -178,56 +186,118 @@ build_target(const p_term &root, uint64_t offset, var_lookup &table)
 		return (tmp);
 	p_structure p = get<p_structure>(tmp);
 	const unique_ptr<token> &t = p->get_root()->get_first();
-	if (t->get_type() == symbol::number)
-		return bind_value {t->get_value()};
+	if (t->get_type() == symbol::integer)
+		return bind_value {t->get_int_value()};
+	if (t->get_type() == symbol::decimal)
+		return bind_value {t->get_decimal_value()};
+	return tmp;
 	return tmp;
 }
 
 using builtin_fn = optional<vector<uint64_t>> (*)(const vector<p_term> &,
 		uint64_t, var_lookup &);
 
-optional<int> add(vector<int> args)
+using arith_type = variant<int, float>;
+
+optional<arith_type> add(vector<arith_type> args)
 {
-	if (args.size() == 2) return args[0] + args[1];
+	if (args.size() != 2)
+		return nullopt;
+	return visit(overloaded {
+	[&] (int a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 +a2};},
+			[&] (float a2) {return arith_type { a1 +a2};}},args[1]);
+	},
+	[&] (float a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 +a2};},
+			[&] (float a2) {return arith_type { a1 +a2};}},args[1]);
+	} }, args[0]);
+}
+
+optional<arith_type> sub(vector<arith_type> args)
+{
+	if (args.size() == 1)
+	return visit(overloaded {
+	[&] (int a1) -> arith_type { return -a1; },
+	[&] (float a1) -> arith_type { return -a1; }
+	}, args[0]);
+	if (args.size() == 2)
+	return visit(overloaded {
+	[&] (int a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 -a2};},
+			[&] (float a2) {return arith_type { a1 -a2};}},args[1]);
+	},
+	[&] (float a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 -a2};},
+			[&] (float a2) {return arith_type { a1 -a2};}},args[1]);
+	} }, args[0]);
 	return nullopt;
 }
 
-optional<int> sub(vector<int> args)
+optional<arith_type> mul(vector<arith_type> args)
 {
-	if (args.size() == 2) return args[0] - args[1];
-	if (args.size() == 1) return -args[0];
+	if (args.size() == 2)
+	return visit(overloaded {
+	[&] (int a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 *a2};},
+			[&] (float a2) {return arith_type { a1 *a2};}},args[1]);
+	},
+	[&] (float a1) -> arith_type {
+		return visit(overloaded {
+			[&] (int a2)   {return arith_type { a1 *a2};},
+			[&] (float a2) {return arith_type { a1 *a2};}},args[1]);
+	} }, args[0]);
 	return nullopt;
 }
 
-optional<int> mul(vector<int> args)
+optional<arith_type> div(vector<arith_type> args)
 {
-	if (args.size() == 2) return args[0] * args[1];
+	if (args.size() == 2)
+	return visit(overloaded {
+	[&] (int a1) -> optional<arith_type> {
+		return visit(overloaded {
+			[&] (int a2) ->optional<arith_type>  { if (a2 == 0) return nullopt;
+			return arith_type { a1 / a2};},
+			[&] (float a2) -> optional<arith_type> { if (a2 == 0.0) return nullopt;
+			return arith_type { a1 / a2};}},args[1]);
+	},
+	[&] (float a1) -> optional<arith_type> {
+		return visit(overloaded {
+			[&] (int a2) -> optional<arith_type>
+			{ if (a2 == 0) return nullopt;
+			return arith_type {a1 / a2};},
+			[&] (float a2) -> optional<arith_type>
+			{ if (a2 == 0.0) return nullopt;
+			return arith_type { a1 / a2};}},args[1]);
+	} }, args[0]);
 	return nullopt;
 }
 
-optional<int> div(vector<int> args)
-{
-	if (args.size() == 2 || args[1] != 0) return args[0] / args[1];
-	return nullopt;
-}
-
-unordered_map<string, optional<int>(*)(vector<int>)> arith_ops = {
+unordered_map<string, optional<arith_type>(*)(vector<arith_type>)>
+arith_ops = {
 	{ "+", add},
 	{ "-", sub},
 	{ "*", mul},
 	{ "/", div},
 };
 
-optional<int> eval_arith(bind_value, var_lookup &);
-optional<int> eval_arith_sub(p_structure s, var_lookup &table)
+optional<arith_type> eval_arith(bind_value, var_lookup &);
+optional<arith_type> eval_arith_sub(p_structure s, var_lookup &table)
 {
 	const auto &head = s->get_root()->get_first();
 	const auto &body = s->get_root()->get_rest();
-	if (head->get_type() == symbol::number)
-		return head->get_value();
+	if (head->get_type() == symbol::integer)
+		return arith_type{head->get_int_value()};
+	if (head->get_type() == symbol::decimal)
+		return arith_type{head->get_decimal_value()};
 	string op = head->get_text();
 	uint64_t base = s->get_id();
-	vector<int> args;
+	vector<arith_type> args;
 	for (auto &i : body) {
 		auto a = eval_arith(build_target(i, base, table), table);
 		if (!a)
@@ -240,14 +310,17 @@ optional<int> eval_arith_sub(p_structure s, var_lookup &table)
 	return m->second(args);
 }
 
-optional<int> eval_arith(bind_value root, var_lookup &table)
+optional<arith_type> eval_arith(bind_value root, var_lookup &table)
 {
 	return visit(overloaded {
-	[&table](p_structure s) -> optional<int> {
+	[&table](p_structure s) -> optional<arith_type> {
 		return eval_arith_sub(s, table);
 	},
-	[] (int s) -> optional<int> {
-		return s;
+	[] (int s) -> optional<arith_type> {
+		return arith_type {s};
+	},
+	[] (float s) -> optional<arith_type> {
+		return arith_type {s};
 	} }, root);
 }
 
@@ -256,10 +329,13 @@ optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
 {
 	bind_value l = build_target(args[0], base, table);
 	bind_value r = build_target(args[1], base, table);
-	optional<int> result = eval_arith(r, table);
+	optional<arith_type> result = eval_arith(r, table);
 	if (!result)
 		return nullopt;
-	return unification_sub(l, bind_value{*result}, table);
+	bind_value b = visit(overloaded {
+	[](int v) { return bind_value {v}; },
+	[](float v) { return bind_value {v}; } }, *result);
+	return unification_sub(l, b, table);
 }
 
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
@@ -319,6 +395,10 @@ print_term(const bind_value &value, const unordered_map<uint64_t, string> v,
 
 	if (holds_alternative<int>(n)) {
 		cout << get<int>(n);
+		return;
+	}
+	if (holds_alternative<float>(n)) {
+		cout << get<float>(n);
 		return;
 	}
 

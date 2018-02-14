@@ -24,24 +24,27 @@ namespace {
 	using std::unordered_map;
 }
 
-enum class symbol { none, atom, ignore, append, number, string,
+enum class symbol { none, atom, ignore, append, integer, decimal, string,
                     variable, error, lparen, rparen,
 	            eof, query, rules, comma, period };
 using position_t = std::pair<uint32_t, uint32_t>;
 
 class token {
 private:
-	string text;
-	symbol token_type;
+	string     text;
+	symbol     token_type;
 	position_t position;
-	int value;
-	bool isint;
+	int        int_value;
+	float      decimal_value;
+	bool       isint;
 public:
 	token(symbol type) : token_type { type } {}
 	token() : token(symbol::error) {}
-	void set_value(int v) { value = v;}
-	int  get_value() { return value; }
-	bool match(string::const_iterator begin,
+	void  set_int_value(int v) { int_value = v;}
+	int   get_int_value() { return int_value; }
+	void  set_decimal_value(float v) { decimal_value = v;}
+	float get_decimal_value() { return decimal_value; }
+	bool  match(string::const_iterator begin,
 			string::const_iterator end,
 			const regex &pat, symbol type) {
 		std::smatch m;

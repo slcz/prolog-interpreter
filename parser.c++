@@ -134,7 +134,8 @@ struct token_parser_entry {
 	{regex("^,"),                           symbol::comma   },
 	{regex("^\\("),                         symbol::lparen  },
 	{regex("^\\)"),                         symbol::rparen  },
-	{regex("^[[:digit:]]+"),                symbol::number  },
+	{regex("^[[:digit:]]+\\.[[:digit:]]+"), symbol::decimal },
+	{regex("^[[:digit:]]+"),                symbol::integer },
 	{regex("^[[:lower:]][[:alnum:]_]*"),    symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
@@ -502,8 +503,11 @@ optional<p_term> parse_term(interp_context &context)
 	vector<p_term> rest;
 
 	t = context.get_token();
-	if (t->get_type() == symbol::number) {
-		t->set_value(stoi(t->get_text()));
+	if (t->get_type() == symbol::decimal) {
+		t->set_decimal_value(stof(t->get_text()));
+		r = make_unique<term>(move(t));
+	} else if (t->get_type() == symbol::integer) {
+		t->set_int_value(stoi(t->get_text()));
 		r = make_unique<term>(move(t));
 	} else if (t->get_type() == symbol::atom) {
 		uint64_t id = context.atom_id.get_id(t->get_text());

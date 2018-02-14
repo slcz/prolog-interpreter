@@ -27,7 +27,7 @@ public:
 	const p_term &get_root() const { return root; }
 };
 using p_structure = shared_ptr<structure>;
-using bind_value = variant<int, p_structure>;
+using bind_value = variant<int, float, p_structure>;
 using var_lookup = unordered_map<uint64_t, bind_value>;
 
 optional<vector<uint64_t>>
