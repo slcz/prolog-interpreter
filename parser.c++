@@ -251,6 +251,10 @@ unique_ptr<token> interp_context::get_token()
 	return t;
 }
 
+unordered_map<char, char> escape_map = {{'a', '\a'}, {'b', '\b'}, {'f', '\f'},
+	{'n', '\n'}, {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\\', '\\'},
+	{'\'', '\''}, {'"', '"'}, {'`', '`'}};
+
 unique_ptr<token> string_transformer(unique_ptr<token> t)
 {
 	string r;
@@ -260,9 +264,19 @@ unique_ptr<token> string_transformer(unique_ptr<token> t)
 		assert(o.length() >= 2);
 		o = o.substr(1, o.length() - 2);
 		for (char c : o) {
-			if (!escape)
-				r.push_back(c);
-			escape = c == '\\';
+			if (!escape) {
+				if (c != '\\')
+					r.push_back(c);
+				else
+					escape = true;
+			} else {
+				escape = false;
+				auto m = escape_map.find(c);
+				if (m == escape_map.end())
+					r.push_back(c);
+				else
+					r.push_back(m->second);
+			}
 		}
 		t->set_text(r);
 		t->set_type(symbol::atom);
