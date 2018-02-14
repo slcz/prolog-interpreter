@@ -24,8 +24,6 @@ namespace {
 	using std::unordered_map;
 }
 
-extern string builtin_predicates;
-
 enum class symbol { none, atom, ignore, append, number, string,
                     variable, error, lparen, rparen,
 	            eof, query, rules, comma, period };

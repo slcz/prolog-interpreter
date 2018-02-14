@@ -67,6 +67,15 @@ bool node::try_unification()
 {
 	auto &f = first_clause;
 	uint64_t t = top;
+
+	if (first_clause == clauses.end())
+		return false;
+	auto u = builtin(*goal, base, table);
+	if (u) {
+		bound_vars = move(*u);
+		first_clause = clauses.end();
+		return true;
+	}
 	/* try unification */
 	for (; f != clauses.end(); f ++) {
 		assert(*goal);

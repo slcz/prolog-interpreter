@@ -183,6 +183,111 @@ build_target(const p_term &root, uint64_t offset, var_lookup &table)
 	return tmp;
 }
 
+using builtin_fn = optional<vector<uint64_t>> (*)(const vector<p_term> &,
+		uint64_t, var_lookup &);
+
+optional<int> add(vector<int> args)
+{
+	if (args.size() == 2) return args[0] + args[1];
+	return nullopt;
+}
+
+optional<int> sub(vector<int> args)
+{
+	if (args.size() == 2) return args[0] - args[1];
+	if (args.size() == 1) return -args[0];
+	return nullopt;
+}
+
+optional<int> mul(vector<int> args)
+{
+	if (args.size() == 2) return args[0] * args[1];
+	return nullopt;
+}
+
+optional<int> div(vector<int> args)
+{
+	if (args.size() == 2 || args[1] != 0) return args[0] / args[1];
+	return nullopt;
+}
+
+unordered_map<string, optional<int>(*)(vector<int>)> arith_ops = {
+	{ "+", add},
+	{ "-", sub},
+	{ "*", mul},
+	{ "/", div},
+};
+
+optional<int> eval_arith(bind_value, var_lookup &);
+optional<int> eval_arith_sub(p_structure s, var_lookup &table)
+{
+	const auto &head = s->get_root()->get_first();
+	const auto &body = s->get_root()->get_rest();
+	if (head->get_type() == symbol::number)
+		return head->get_value();
+	string op = head->get_text();
+	uint64_t base = s->get_id();
+	vector<int> args;
+	for (auto &i : body) {
+		auto a = eval_arith(build_target(i, base, table), table);
+		if (!a)
+			return nullopt;
+		args.push_back(move(*a));
+	}
+	auto m = arith_ops.find(op);
+	if (m == arith_ops.end())
+		return nullopt;
+	return m->second(args);
+}
+
+optional<int> eval_arith(bind_value root, var_lookup &table)
+{
+	return visit(overloaded {
+	[&table](p_structure s) -> optional<int> {
+		return eval_arith_sub(s, table);
+	},
+	[] (int s) -> optional<int> {
+		return s;
+	} }, root);
+}
+
+optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
+		uint64_t base, var_lookup &table)
+{
+	bind_value l = build_target(args[0], base, table);
+	bind_value r = build_target(args[1], base, table);
+	optional<int> result = eval_arith(r, table);
+	if (!result)
+		return nullopt;
+	return unification_sub(l, bind_value{*result}, table);
+}
+
+unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
+	{ "is", {builtin_is, 2}}
+};
+
+optional<vector<uint64_t>>
+builtin(const p_term &src, uint64_t srcoff, var_lookup &table)
+{
+	bind_value srctgt = build_target(src, srcoff, table);
+	if (!holds_alternative<p_structure>(srctgt))
+		return nullopt;
+	p_structure p = get<p_structure>(srctgt);
+	const unique_ptr<token> &head = p->get_root()->get_first();
+	const vector<p_term> &rest = p->get_root()->get_rest();
+	if (head->get_type() != symbol::atom)
+		return nullopt;
+	auto m = builtin_map.find(head->get_text());
+	if (m == builtin_map.end())
+		return nullopt;
+	builtin_fn f = m->second.first;
+	if (m->second.second != rest.size())
+		return nullopt;
+	if (!f)
+		return nullopt;
+	return f(rest, srcoff, table);
+}
+
 optional<vector<uint64_t>>
 unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 		uint64_t dstoff, var_lookup &table)

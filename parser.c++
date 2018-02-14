@@ -633,9 +633,7 @@ void scan_vars(const p_term &t, uint64_t base,
 bool program()
 {
 	vector<istream *> ios;
-	stringstream s = stringstream {builtin_predicates};
 	ios.push_back(&cin);
-	ios.push_back(&s);
 	interp_context context {ios};
 	optional<p_clause> c;
 	vector<p_clause> cs;
