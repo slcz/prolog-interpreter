@@ -35,7 +35,8 @@ using var_lookup = unordered_map<uint64_t, bind_value>;
 enum class control { none, logical_not, cut };
 
 optional<vector<uint64_t>>
-unification(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &);
+unification(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &,
+    bool compare_only = false);
 void remove_from_table(var_lookup &, const vector<uint64_t> &);
 void print_all(
      const unordered_map<uint64_t, string> &, const var_lookup &);
@@ -45,3 +46,4 @@ optional<pair<control, vector<uint64_t>>>
 
 bool can_unwrap(const p_term &, uint64_t, var_lookup &);
 const p_term &unwrap(const p_term &, uint64_t, var_lookup &);
+bool compare_terms(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &);

@@ -224,15 +224,26 @@ non_provable(const vector<p_term> &args, uint64_t base, var_lookup &table)
 	return make_pair(control::logical_not, vector<uint64_t>());
 }
 
+optional<pair<control, vector<uint64_t>>>
+literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table)
+{
+	bool r = compare_terms(args[0], args[1], base, base, table);
+	if (r)
+		return make_pair(control::none, vector<uint64_t>());
+	else
+		return nullopt;
+}
+
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
-	{ "is",   {builtin_is,    2}},
-	{ "=:=",  {builtin_eq,    2}},
-	{ "=\\=", {builtin_ne,    2}},
-	{ "<",    {builtin_lt,    2}},
-	{ ">",    {builtin_gt,    2}},
-	{ "=<",   {builtin_le,    2}},
-	{ ">=",   {builtin_ge,    2}},
-	{ "\\+",  {non_provable,  1}},
+	{ "is",   {builtin_is,      2}},
+	{ "=:=",  {builtin_eq,      2}},
+	{ "=\\=", {builtin_ne,      2}},
+	{ "<",    {builtin_lt,      2}},
+	{ ">",    {builtin_gt,      2}},
+	{ "=<",   {builtin_le,      2}},
+	{ ">=",   {builtin_ge,      2}},
+	{ "\\+",  {non_provable,    1}},
+	{ "==",   {literal_compare, 2}},
 };
 
 optional<pair<control, vector<uint64_t>>>

@@ -8,6 +8,25 @@
 
 using namespace std;
 
+bool check_vars(bind_value &src, bind_value &dst, var_lookup &table, bool &r)
+{
+	r = false;
+	if (!holds_alternative<p_structure>(src))
+		return false;
+	if (!holds_alternative<p_structure>(dst))
+		return false;
+	auto &psrc = get<p_structure>(src);
+	auto &pdst = get<p_structure>(dst);
+	symbol stype = psrc->get_root()->get_first()->get_type();
+	symbol dtype = pdst->get_root()->get_first()->get_type();
+	if (stype != symbol::variable && dtype != symbol::variable)
+		return false;
+	if (stype == symbol::variable && dtype == symbol::variable &&
+			psrc->get_id() == pdst->get_id())
+		r = true;
+	return true;
+}
+
 void remove_from_table(var_lookup &table, const vector<uint64_t> &list)
 {
 	if (list.empty())
@@ -29,10 +48,8 @@ const bind_value &walk(const bind_value &value, const var_lookup &table)
 	return value;
 }
 
-optional<vector<uint64_t>> unification(const p_term &, const p_term &,
-		uint64_t, uint64_t, var_lookup &);
 optional<vector<uint64_t>>
-unify_rest(p_structure &src, p_structure &dst, var_lookup &table)
+unify_rest(p_structure &src, p_structure &dst, var_lookup &table, bool cmp)
 {
 	uint64_t srcoff = src->get_base(), dstoff = dst->get_base();
 	auto &srcvec = src->get_root()->get_rest(),
@@ -43,7 +60,7 @@ unify_rest(p_structure &src, p_structure &dst, var_lookup &table)
 	optional<vector<uint64_t>> r;
 
 	for (;ss != se && ds != de; ss ++, ds ++) {
-		if ((r = unification(*ss, *ds, srcoff, dstoff, table))) {
+		if ((r = unification(*ss, *ds, srcoff, dstoff, table, cmp))) {
 			if (!r->empty())
 				all.insert(all.end(), r->begin(), r->end());
 		} else
@@ -110,7 +127,7 @@ optional<uint64_t> bind(p_structure &from, bind_value to, var_lookup &table)
 }
 
 optional<vector<uint64_t>>
-unify_terms(p_structure &src, p_structure &dst, var_lookup &table)
+unify_terms(p_structure &src, p_structure &dst, var_lookup &table, bool cmp)
 {
 	optional<vector<uint64_t>> r;
 	vector<uint64_t> all;
@@ -118,7 +135,7 @@ unify_terms(p_structure &src, p_structure &dst, var_lookup &table)
 
 	assert(stype == symbol::atom && dtype == symbol::atom);
 	if (src->get_id() == dst->get_id() &&
-	    (r = unify_rest(src, dst, table))) {
+	    (r = unify_rest(src, dst, table, cmp))) {
 		if (!r->empty())
 			all.insert(all.end(), r->begin(), r->end());
 		return all;
@@ -142,9 +159,17 @@ unify_variable(p_structure &src, bind_value dst, var_lookup &table)
 }
 
 optional<vector<uint64_t>> unification_sub(bind_value src, bind_value dst,
-        var_lookup &table)
+        var_lookup &table, bool cmp)
 {
-	if (holds_alternative<p_structure>(src)) {
+	bool cmp_rst = false;
+	if (cmp) {
+		if (check_vars(src, dst, table, cmp_rst)) {
+			if (cmp_rst)
+				return vector<uint64_t>();
+			else
+				return nullopt;
+		}
+	} else if (holds_alternative<p_structure>(src)) {
 		p_structure p = get<p_structure>(src);
 		assert(p);
 		if (p->get_root()->get_first()->get_type() == symbol::variable)
@@ -153,9 +178,9 @@ optional<vector<uint64_t>> unification_sub(bind_value src, bind_value dst,
 	if (src.index() != dst.index())
 		return nullopt;
 	return visit(overloaded {
-		[&table, &dst](p_structure s) {
+		[&table, &dst, cmp](p_structure s) {
 			p_structure &d = get<p_structure>(dst);
-			return unify_terms(s, d, table);
+			return unify_terms(s, d, table, cmp);
 		},
 		[&table, &dst](int s) -> optional<vector<uint64_t>> {
 			vector<uint64_t> v;
@@ -221,7 +246,7 @@ unwrap(const p_term &t, uint64_t base, var_lookup &table)
 
 optional<vector<uint64_t>>
 unification(const p_term &src, const p_term &dst, uint64_t srcoff,
-		uint64_t dstoff, var_lookup &table)
+    uint64_t dstoff, var_lookup &table, bool cmp)
 {
 	bind_value srctgt, dsttgt;
 	optional<vector<uint64_t>> r;
@@ -236,9 +261,19 @@ unification(const p_term &src, const p_term &dst, uint64_t srcoff,
 		}
 	}
 	if (!done)
-		r = unification_sub(move(dsttgt), move(srctgt), table);
+		r = unification_sub(move(dsttgt), move(srctgt), table, cmp);
 
 	return r;
+}
+
+bool
+compare_terms(const p_term &src, const p_term &dst, uint64_t srcoff,
+              uint64_t dstoff, var_lookup &table)
+{
+	auto r = unification(src, dst, srcoff, dstoff, table, true);
+	if (!r)
+		return false;
+	return true;
 }
 
 // test
