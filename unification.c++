@@ -185,6 +185,8 @@ build_target(const p_term &root, uint64_t offset, var_lookup &table)
 	const bind_value tmp = walk(newroot, table);
 	if (holds_alternative<int>(tmp))
 		return (tmp);
+	if (holds_alternative<float>(tmp))
+		return (tmp);
 	p_structure p = get<p_structure>(tmp);
 	const unique_ptr<token> &t = p->get_root()->get_first();
 	if (t->get_type() == symbol::integer)
@@ -199,7 +201,6 @@ using builtin_fn = optional<vector<uint64_t>> (*)(const vector<p_term> &,
 		uint64_t, var_lookup &);
 
 using arith_type = variant<int, float>;
-
 
 optional<arith_type> unary_op(arith_type a0,
     function<int(int)> intf, function<float(float)> floatf)
@@ -218,8 +219,9 @@ optional<arith_type> unary_op(arith_type a0,
 	}, a0);
 }
 
+template <typename R1, typename R2>
 optional<arith_type> binary_op(arith_type a0, arith_type a1,
-    function<int(int,int)> intf, function<float(float,float)> floatf)
+    function<R1(int,int)> intf, function<R2(float,float)> floatf)
 {
 	if (!intf) {
 		if (!holds_alternative<float>(a0) ||
@@ -246,40 +248,45 @@ optional<arith_type> binary_op(arith_type a0, arith_type a1,
 	} }, a0);
 }
 
-optional<arith_type> add(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], plus<>(), plus<>());
+optional<arith_type> add(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], plus<>(), plus<>()); }
+
+optional<arith_type> neg(vector<arith_type> args) {
+	return unary_op(args[0], negate<>(), negate<>()); }
+
+optional<arith_type> sub(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], minus<>(), minus<>());
 }
 
-optional<arith_type> neg(vector<arith_type> args)
-{
-	return unary_op(args[0], negate<>(), negate<>());
-}
+optional<arith_type> mul(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], multiplies<>(), multiplies<>()); }
 
-optional<arith_type> sub(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], minus<>(), minus<>());
-}
+optional<arith_type> div(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], divides<>(), divides<>()); }
 
-optional<arith_type> mul(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], multiplies<>(), multiplies<>());
-}
+optional<arith_type> idiv(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], divides<>(), nullptr); }
 
-optional<arith_type> div(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], divides<>(), divides<>());
-}
+optional<arith_type> mod(vector<arith_type> args) {
+	return binary_op<int,float>(args[0], args[1], modulus<>(), nullptr); }
 
-optional<arith_type> idiv(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], divides<>(), nullptr);
-}
+optional<arith_type> eq(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], equal_to<>(), equal_to<>()); }
 
-optional<arith_type> mod(vector<arith_type> args)
-{
-	return binary_op(args[0], args[1], modulus<>(), nullptr);
-}
+optional<arith_type> ne(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], not_equal_to<>(), not_equal_to<>()); }
+
+optional<arith_type> gt(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], greater<>(), greater<>()); }
+
+optional<arith_type> lt(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], less<>(), less<>()); }
+
+optional<arith_type> ge(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], greater_equal<>(), greater_equal<>()); }
+
+optional<arith_type> le(vector<arith_type> args) {
+	return binary_op<bool,bool>(args[0], args[1], less_equal<>(), less_equal<>()); }
 
 using mtype = unordered_multimap<string,
       pair<optional<arith_type>(*)(vector<arith_type>), uint32_t>>;
@@ -292,6 +299,12 @@ mtype arith_ops = {
 	{ "/",   {div, 2}},
 	{ "//",  {idiv,2}},
 	{ "mod", {mod, 2}},
+	{ "=:=", {eq,  2}},
+	{ "=\\=",{ne,  2}},
+	{ "<",   {lt,  2}},
+	{ ">",   {gt,  2}},
+	{ ">=",  {ge,  2}},
+	{ "=<",  {le,  2}}
 };
 
 optional<arith_type> eval_arith(bind_value, var_lookup &);
@@ -304,19 +317,20 @@ optional<arith_type> eval_arith_sub(p_structure s, var_lookup &table)
 	if (head->get_type() == symbol::decimal)
 		return arith_type{head->get_decimal_value()};
 	string op = head->get_text();
-	uint64_t base = s->get_id();
+	uint64_t base = s->get_base();
 	vector<arith_type> args;
 	for (auto &i : body) {
 		auto a = eval_arith(build_target(i, base, table), table);
 		if (!a)
 			return nullopt;
-		args.push_back(move(*a));
+		args.push_back(*a);
 	}
 	auto m = arith_ops.equal_range(op);
 	auto p = m.first;
 	while (p != m.second) {
 		if (p->second.second == args.size())
 			return p->second.first(args);
+		p ++;
 	}
 	return nullopt;
 }
@@ -335,6 +349,67 @@ optional<arith_type> eval_arith(bind_value root, var_lookup &table)
 	} }, root);
 }
 
+optional<vector<uint64_t>> builtin_compare(const vector<p_term> &args,
+    uint64_t base, var_lookup &table,
+    function<bool(int,int)> intf, function<bool(float,float)> floatf)
+{
+	bind_value l = build_target(args[0], base, table);
+	bind_value r = build_target(args[1], base, table);
+	optional<arith_type> result1 = eval_arith(l, table);
+	if (!result1)
+		return nullopt;
+	optional<arith_type> result2 = eval_arith(r, table);
+	if (!result2)
+		return nullopt;
+	auto comp = binary_op<bool,bool>(*result1, *result2, intf, floatf);
+	if (!comp)
+		return nullopt;
+	if (holds_alternative<int>(*comp)) {
+		int res = get<int>(*comp);
+		if (res)
+			return vector<uint64_t>();
+		else
+			return nullopt;
+	}
+	return nullopt;
+}
+
+optional<vector<uint64_t>> builtin_eq(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, equal_to<>(), equal_to<>());
+}
+
+optional<vector<uint64_t>> builtin_ne(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, not_equal_to<>(), not_equal_to<>());
+}
+
+optional<vector<uint64_t>> builtin_lt(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, equal_to<>(), equal_to<>());
+}
+
+optional<vector<uint64_t>> builtin_le(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, less_equal<>(), less_equal<>());
+}
+
+optional<vector<uint64_t>> builtin_gt(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, greater<>(), greater<>());
+}
+
+optional<vector<uint64_t>> builtin_ge(const vector<p_term> &args,
+    uint64_t base, var_lookup &table)
+{
+	return builtin_compare(args, base, table, greater_equal<>(), greater_equal<>());
+}
+
 optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
 		uint64_t base, var_lookup &table)
 {
@@ -349,34 +424,14 @@ optional<vector<uint64_t>> builtin_is(const vector<p_term> &args,
 	return unification_sub(l, b, table);
 }
 
-#if 0
-optional<vector<uint64_t>> builtin_compare(
-		const vector<p_term> &args,
-		uint64_t base, var_lookup &table)
-{
-	bind_value l = build_target(args[0], base, table);
-	bind_value r = build_target(args[1], base, table);
-	optional<arith_type> lr = eval_arith(l, table);
-	optional<arith_type> rr = eval_arith(r, table);
-	if (!result)
-		return nullopt;
-	bind_value b = visit(overloaded {
-	[](int v)   { return bind_value {v}; },
-	[](float v) { return bind_value {v}; } }, *result);
-	return unification_sub(l, b, table);
-}
-#endif
-
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
 	{ "is", {builtin_is, 2}},
-#if 0
 	{ "=:=",{builtin_eq, 2}},
-	{ "=\=",{builtin_ne, 2}},
+	{ "=\\=",{builtin_ne, 2}},
 	{ "<",  {builtin_lt, 2}},
 	{ ">",  {builtin_gt, 2}},
 	{ "=<", {builtin_le, 2}},
 	{ ">=", {builtin_ge, 2}},
-#endif
 };
 
 optional<vector<uint64_t>>

@@ -54,19 +54,22 @@ public:
 class operator_t {
 private:
 	op_t dummy;
-	unordered_map<string, op_t> operators;
+	unordered_multimap<string, op_t> operators;
 	set<int, greater<int>> pred_set;
 public:
 	void insert(string o, op_t op) {
 		operators.insert(make_pair<string, op_t>(move(o), move(op)));
 		pred_set.insert(op.get_pred());
 	}
-	op_t &getop(const string key) {
-		auto m = operators.find(key);
-		if (m == operators.end())
-			return dummy;
-		else
-			return (*m).second;
+	op_t &getop(const string key, int prio) {
+		auto m = operators.equal_range(key);
+		auto p = m.first;
+		while (p != m.second) {
+			if (p->second.get_pred() == prio)
+				return p->second;
+			p ++;
+		}
+		return dummy;
 	}
 	int lowest() { return *pred_set.begin(); }
 	optional<int> higher(int last) {
@@ -347,13 +350,14 @@ many(interp_context &context, optional<T>(*unit)(interp_context &),
 optional<p_term> parse_exp(interp_context &, int);
 optional<p_term> parse_term(interp_context &);
 optional<p_term> parse_expression(interp_context &);
+
 optional<p_term> parse_exp_next(interp_context &context, int priority)
 {
 	auto new_prio = context.ops.higher(priority);
 	optional<p_term> r;
-	if (new_prio)
+	if (new_prio) {
 		r = parse_exp(context, *new_prio);
-	else {
+	} else {
 		unique_ptr<token> t;
 
 		t = context.get_token();
@@ -391,7 +395,7 @@ exp_return check_op(exp_param &param,
 	exp_return r;
 	r.tok = param.context.get_token();
 	if (r.tok->get_type() == symbol::atom) {
-		op_t &op = param.context.ops.getop(r.tok->get_text());
+		op_t &op = param.context.ops.getop(r.tok->get_text(), param.priority);
 		if (!op.null() && op.get_pred() == param.priority)
 			return f(param, op, r);
 	}
@@ -409,9 +413,9 @@ exp_return parse_exp_prefix(exp_param &param, op_t &op, exp_return &r)
 		param.context.push(r.tok);
 		return move(r);
 	}
-	if (op.noassoc())
+	if (op.noassoc()) {
 		p = parse_exp_next(param.context, param.priority);
-	else
+	} else
 		p = parse_exp(param.context, param.priority);
 	if (!p)
 		throw syntax_error(param.context.get_position(),
