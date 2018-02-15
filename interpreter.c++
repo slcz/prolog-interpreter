@@ -27,6 +27,7 @@ private:
 	void expand(vector<uint64_t>);
 	control          flags;
 	bool             _solve();
+	void             do_cut();
 public:
 	node(const vector<p_clause> &_cls, var_lookup &_table,
 	     clause_iter fst, term_iter _goal, uint64_t _base, uint64_t &_top) :
@@ -37,8 +38,10 @@ public:
 	     term_iter b, node c):
 	node(_cls, _table, fst, _goal, _base, _top)
 	{ last_child = b; children.push_back(move(c)); }
+	void stop_backtracking() { first_clause = clauses.end(); }
 	bool solve();
 	bool try_unification();
+	control get_flags() { return flags; }
 	optional<unique_ptr<node>> sibling(term_iter end) {
 		term_iter n = goal + 1;
 		if (n == end)
@@ -101,6 +104,13 @@ bool node::try_unification()
 	return false;
 }
 
+void node::do_cut()
+{
+	for (auto &child: children)
+		child.stop_backtracking();
+	stop_backtracking();
+}
+
 bool node::_solve()
 {
 	while (true) {
@@ -115,6 +125,8 @@ bool node::_solve()
 		while (!children.empty()) {
 			node &last = children.back();
 			if (last.solve()) {
+				if (last.flags == control::cut)
+					do_cut();
 				optional<unique_ptr<node>> next;
 				if ((next = last.sibling(last_child)))
 					children.push_back(move(**next));

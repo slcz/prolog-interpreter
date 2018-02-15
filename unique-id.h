@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <string>
 #include <cstdint>
+#include <iostream>
 
 class unique_id {
 private:

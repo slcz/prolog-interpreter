@@ -277,9 +277,34 @@ compare_terms(const p_term &src, const p_term &dst, uint64_t srcoff,
 }
 
 // test
+void print_term(const bind_value &, var_lookup &);
 void
-print_term(const bind_value &value, const unordered_map<uint64_t, string> v,
-		const var_lookup &table)
+print_list(p_structure &s, var_lookup &table)
+{
+	uint64_t id = s->get_base();
+	const vector<p_term> &rest = s->get_root()->get_rest();
+	const bind_value &left  = build_target(rest[0], id, table);
+	const bind_value &right = build_target(rest[1], id, table);
+	print_term(left, table);
+	if (holds_alternative<p_structure>(right)) {
+		auto n = get<p_structure>(right);
+		const unique_ptr<token> &first = n->get_root()->get_first();
+		const vector<p_term> &rest = n->get_root()->get_rest();
+		if (first->get_type() == symbol::atom &&
+		    first->get_text() == "." && rest.size() == 2) {
+			cout << ", ";
+			print_list(n, table);
+		} else if (first->get_type() != symbol::atom ||
+		           first->get_text() != "[]" || rest.size() != 0) {
+			cout << "|";
+			print_term(right, table);
+		}
+	} else
+		print_term(right, table);
+}
+
+void
+print_term(const bind_value &value, var_lookup &table)
 {
 	const bind_value &n = walk(value, table);
 
@@ -297,26 +322,33 @@ print_term(const bind_value &value, const unordered_map<uint64_t, string> v,
 	const unique_ptr<token> &first = t->get_root()->get_first();
 	const vector<p_term> &rest = t->get_root()->get_rest();
 	uint64_t offset = t->get_base();
+	if (first->get_type() == symbol::atom && first->get_text() == "." &&
+	    rest.size() == 2) {
+		cout << "[";
+		print_list(t, table);
+		cout << "]";
+		return;
+	}
 	cout << first->get_text();
 	if (t->get_type() == symbol::atom && !rest.empty()) {
 		cout << "(";
 		for (auto &i : rest) {
 			p_structure a = make_shared<structure>(i, offset);
-			print_term(a, v, table);
+			print_term(a, table);
 		}
 		cout << ")";
 	}
 }
 
 void
-print_all(const unordered_map<uint64_t, string> &v, const var_lookup &table)
+print_all(const unordered_map<uint64_t, string> &v, var_lookup &table)
 {
 	for (auto &i :v) {
 		auto n = table.find(i.first);
 		if (n != table.end()) {
 			auto &s = walk(n->second, table);
 			cout << i.second << "=>";
-			print_term(s, v, table);
+			print_term(s, table);
 			cout << endl;
 		}
 	}

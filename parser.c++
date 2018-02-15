@@ -10,7 +10,7 @@ using namespace std;
 
 class syntax_error : public exception {
 private:
-	position_t position;
+	const position_t position;
 	std::string message;
 public:
 	syntax_error(const position_t &p, const std::string &m)
@@ -20,6 +20,8 @@ public:
 			">: " << "Syntax error: " << message;
 		message = s.str();
 	}
+	syntax_error(const token &p, const std::string &m)
+		: syntax_error(p.get_position(), m) {}
 	const char *what() const throw () {
 		return message.c_str();
 	}
@@ -138,6 +140,7 @@ struct token_parser_entry {
 	{regex("^,"),                           symbol::comma   },
 	{regex("^\\|"),                         symbol::vbar    },
 	{regex(R"(^\[\])"),                     symbol::atom    },
+	{regex("^!"),                           symbol::cut     },
 	{regex("^\\["),                         symbol::lbracket},
 	{regex("^\\]"),                         symbol::rbracket},
 	{regex("^\\("),                         symbol::lparen  },
@@ -210,7 +213,7 @@ unique_ptr<token> interp_context::_get_token()
 	next = make_unique<token>(symbol::none);
 	do {
 		while (str.begin() + offset == str.end() &&
-		       next->get_type() == symbol::none) {
+		       next->get_type() != symbol::eof) {
 			while (true) {
 				if (ins.empty()) {
 					next = make_unique<token>(symbol::eof);
@@ -228,7 +231,6 @@ unique_ptr<token> interp_context::_get_token()
 		}
 		token_position = position;
 		if (next->get_type() != symbol::eof) {
-			token_position = position;
 			next = parse_token(str.begin() + offset, str.end());
 			while (next->get_type() == symbol::append) {
 				string line_continue;
@@ -247,8 +249,8 @@ unique_ptr<token> interp_context::_get_token()
 			position.second += length;
 		}
 	} while (next->get_type() == symbol::ignore);
-
 	next->set_position(token_position);
+
 	return (next);
 }
 
@@ -263,6 +265,13 @@ unique_ptr<token> interp_context::get_token()
 unordered_map<char, char> escape_map = {{'a', '\a'}, {'b', '\b'}, {'f', '\f'},
 	{'n', '\n'}, {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\\', '\\'},
 	{'\'', '\''}, {'"', '"'}, {'`', '`'}};
+
+unique_ptr<token> cut_transformer(unique_ptr<token> t)
+{
+	if (t->get_type() == symbol::cut)
+		t->set_type(symbol::atom);
+	return t;
+}
 
 unique_ptr<token> string_transformer(unique_ptr<token> t)
 {
@@ -348,7 +357,7 @@ many(interp_context &context, optional<T>(*unit)(interp_context &),
 		}
 	}
 	if (next)
-		throw syntax_error(context.get_position(), "unexpected char");
+		throw syntax_error(*tok, "extra comma at the end");
 	return (vec);
 }
 
@@ -368,9 +377,9 @@ optional<p_term> parse_exp_next(interp_context &context, int priority)
 		t = context.get_token();
 		if (t->get_type() == symbol::lparen) {
 			r = parse_expression(context);
-			if (context.get_token()->get_type() != symbol::rparen)
-				throw syntax_error(context.get_position(),
-						") expected");
+			auto t = context.get_token();
+			if (t->get_type() != symbol::rparen)
+				throw syntax_error(*t, ") expected");
 		} else {
 			context.push(t);
 			r = parse_term(context);
@@ -400,9 +409,14 @@ exp_return check_op(exp_param &param,
 	exp_return r;
 	r.tok = param.context.get_token();
 	if (r.tok->get_type() == symbol::atom) {
-		op_t &op = param.context.ops.getop(r.tok->get_text(), param.priority);
-		if (!op.null() && op.get_pred() == param.priority)
+		op_t &op = param.context.ops.getop(r.tok->get_text(),
+				param.priority);
+		if (!op.null() && op.get_pred() == param.priority) {
+			uint64_t id = param.context.atom_id.get_id(
+					r.tok->get_text());
+			r.tok->id = id;
 			return f(param, op, r);
+		}
 	}
 	param.context.push(r.tok);
 	r.cont = true;
@@ -423,8 +437,7 @@ exp_return parse_exp_prefix(exp_param &param, op_t &op, exp_return &r)
 	} else
 		p = parse_exp(param.context, param.priority);
 	if (!p)
-		throw syntax_error(param.context.get_position(),
-				"expression expected.");
+		throw syntax_error(*(r.tok), "expression parse error.");
 	vector<p_term> v;
 	v.push_back(move(*p));
 	r.exp  = make_unique<term>(move(r.tok), move(v));
@@ -460,7 +473,7 @@ exp_return parse_exp_infix_postfix(exp_param &param, op_t &op, exp_return &r)
 		return move(r);
 	}
 fail:
-	throw syntax_error(param.context.get_position(), "expression expected.");
+	throw syntax_error(*(r.tok), "expression expected.");
 }
 
 optional<p_term> parse_exp(interp_context &context, int priority)
@@ -505,6 +518,16 @@ parse_expression(interp_context &context)
 	return parse_exp(context, low);
 }
 
+optional<p_term>
+parse_expression_rules(interp_context &context)
+{
+	int low = context.ops.lowest();
+	context.ins_transformer(cut_transformer);
+	auto r = parse_exp(context, low);
+	context.rmv_transformer(cut_transformer);
+	return r;
+}
+
 optional<p_term> parse_list(interp_context &context)
 {
 	unique_ptr<token> t;
@@ -513,36 +536,39 @@ optional<p_term> parse_list(interp_context &context)
 	if ((rtn = parse_expression(context))) {
 		lnode = move(*rtn);
 		t = context.get_token();
-		if (t && t->get_type() == symbol::rbracket) {
+		if (!t)
+			return nullopt;
+		if (t->get_type() == symbol::rbracket) {
 			auto n = make_unique<token>(symbol::atom);
 			n->set_text("[]");
+			uint64_t id = context.atom_id.get_id(n->get_text());
+			n->id = id;
 			rnode = make_unique<term>(move(n));
-		} else if (t && t->get_type() == symbol::vbar) {
+		} else if (t->get_type() == symbol::vbar) {
 			auto n = parse_expression(context);
 			if (!n)
-				throw syntax_error(context.get_position(),
-						"expression expected");
+				throw syntax_error(*t, "expression expected");
 			rnode = move(*n);
-			if (context.get_token()->get_type()!= symbol::rbracket)
-				throw syntax_error(context.get_position(),
-						"] expected");
-		} else if (t && t->get_type() == symbol::comma) {
+			auto r = context.get_token();
+			if (r->get_type()!= symbol::rbracket)
+				throw syntax_error(*r, "] expected");
+		} else if (t->get_type() == symbol::comma) {
 			rtn = parse_list(context);
 			if (!rtn)
-				throw syntax_error(context.get_position(),
-						"expression expected");
+				throw syntax_error(*t, "expression expected");
 			rnode = move(*rtn);
 		} else
-			throw syntax_error(context.get_position(),
-					"list parse error");
+			return nullopt;
 		auto n = make_unique<token>(symbol::atom);
 		vector<p_term> v;
 		v.push_back(move(lnode));
 		v.push_back(move(rnode));
 		n->set_text(".");
+		uint64_t id = context.atom_id.get_id(n->get_text());
+		n->id = id;
 		return make_unique<term>(move(n), move(v));
 	} else
-		throw syntax_error(context.get_position(), "list expected");
+		throw syntax_error(*t, "list parsing error");
 }
 
 optional<p_term> parse_term(interp_context &context)
@@ -553,7 +579,10 @@ optional<p_term> parse_term(interp_context &context)
 
 	t = context.get_token();
 	if (t->get_type() == symbol::lbracket) {
-		return parse_list(context);
+		auto l = parse_list(context);
+		if (!l)
+			throw syntax_error(*t, "list parsing error");
+		return l;
 	} else if (t->get_type() == symbol::decimal) {
 		t->set_decimal_value(stof(t->get_text()));
 		r = make_unique<term>(move(t));
@@ -567,11 +596,10 @@ optional<p_term> parse_term(interp_context &context)
 		if (next->get_type() == symbol::lparen) {
 			if ((rest = many(context, parse_expression,
 					symbol::comma)).empty())
-				throw syntax_error(
-				    context.get_position(), "term expected");
-			if (context.get_token()->get_type() != symbol::rparen)
-				throw syntax_error(
-				    context.get_position(), ") expected");
+				throw syntax_error(*next, "term expected");
+			auto next_tok = context.get_token();
+			if (next_tok->get_type() != symbol::rparen)
+				throw syntax_error(*next_tok, ") expected");
 			r = make_unique<term>(move(t), move(rest));
 		} else {
 			context.push(next);
@@ -617,23 +645,22 @@ optional<p_clause> parse_clause(interp_context &context)
 	if (!head) {
 		rv = nullopt;
 	} else {
-		if ((*head)->get_first()->get_type() != symbol::atom)
-			throw syntax_error(context.get_position(),
-					"predicate expected");
+		const unique_ptr<token> &n = (*head)->get_first();
+		if (n->get_type() != symbol::atom)
+			throw syntax_error(*n, "predicate expected");
 		t = expect_period(context);
 		if (t->get_type() != symbol::period) {
 			if (t->get_type() != symbol::rules)
-				throw syntax_error(context.get_position(),
-					". or :- expected");
+				throw syntax_error(*t, ". or :- expected");
 			// body
-			body = many(context, parse_expression, symbol::comma);
+			body = many(context, parse_expression_rules,
+			            symbol::comma);
 			if (body.empty())
-				throw syntax_error(context.get_position(),
-					"rule body expected");
+				throw syntax_error(*t, "rule body expected");
 			rv = make_unique<clause>(move(*head), move(body));
-			if (expect_period(context)->get_type() != symbol::period)
-				throw syntax_error(context.get_position(),
-					". expected");
+			auto next_tok = expect_period(context);
+			if (next_tok->get_type() != symbol::period)
+				throw syntax_error(*next_tok, ". expected");
 		} else
 			rv = make_unique<clause>(move(*head));
 	}
@@ -648,8 +675,7 @@ vector<p_term> parse_query(interp_context &context)
 
 	if (t->get_type() != symbol::query) {
 		if (t->get_type() != symbol::atom)
-			throw syntax_error(context.get_position(),
-				"unexpected character");
+			throw syntax_error(*t, "unexpected character");
 		context.push(t);
 		return goals;
 	}
@@ -657,11 +683,10 @@ vector<p_term> parse_query(interp_context &context)
 	context.var_id.clear();
 	goals = many(context, parse_expression, symbol::comma);
 	if (goals.empty())
-		throw syntax_error(context.get_position(),
-			"at least 1 goal is expected");
-	if (expect_period(context)->get_type() != symbol::period)
-		throw syntax_error(context.get_position(),
-			"missing .");
+		throw syntax_error(*t, "at least 1 goal is expected after ?-");
+	auto next_tok = expect_period(context);
+	if (next_tok->get_type() != symbol::period)
+		throw syntax_error(*next_tok, "missing .");
 	return goals;
 }
 

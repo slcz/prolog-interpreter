@@ -27,7 +27,7 @@ namespace {
 
 enum class symbol { none, atom, ignore, append, integer, decimal, string,
                     variable, error, lparen, rparen, lbracket, rbracket,
-	            eof, query, rules, comma, period, vbar };
+	            eof, query, rules, comma, period, vbar, cut };
 using position_t = std::pair<uint32_t, uint32_t>;
 
 class token {
@@ -74,8 +74,8 @@ private:
 	int ident;
 public:
 	term(unique_ptr<token> f, vector<unique_ptr<term>> r) :
-		first{move(f)}, rest{move(r)} {}
-	term(unique_ptr<token> f) : first{move(f)} {}
+		first{move(f)}, rest{move(r)}, ident{0} {}
+	term(unique_ptr<token> f) : first{move(f)}, ident{0} {}
 	term(const term& t) = delete;
 	const unique_ptr<token> &get_first() { return first; }
 	const auto &get_rest () { return rest;  }

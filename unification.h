@@ -39,7 +39,7 @@ unification(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &,
     bool compare_only = false);
 void remove_from_table(var_lookup &, const vector<uint64_t> &);
 void print_all(
-     const unordered_map<uint64_t, string> &, const var_lookup &);
+     const unordered_map<uint64_t, string> &, var_lookup &);
 bool execute_is(p_term &);
 optional<pair<control, vector<uint64_t>>>
      builtin(const p_term &, uint64_t, var_lookup &);

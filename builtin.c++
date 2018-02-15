@@ -225,6 +225,12 @@ non_provable(const vector<p_term> &args, uint64_t base, var_lookup &table)
 }
 
 optional<pair<control, vector<uint64_t>>>
+builtin_cut(const vector<p_term> &args, uint64_t base, var_lookup &table)
+{
+	return make_pair(control::cut, vector<uint64_t>());
+}
+
+optional<pair<control, vector<uint64_t>>>
 literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
 	bool r = compare_terms(args[0], args[1], base, base, table);
@@ -244,6 +250,7 @@ unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
 	{ ">=",   {builtin_ge,      2}},
 	{ "\\+",  {non_provable,    1}},
 	{ "==",   {literal_compare, 2}},
+	{ "!",    {builtin_cut,     0}}
 };
 
 optional<pair<control, vector<uint64_t>>>
