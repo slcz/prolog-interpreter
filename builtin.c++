@@ -227,9 +227,9 @@ builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table)
 }
 
 optional<pair<control, vector<uint64_t>>>
-non_provable(const vector<p_term> &args, uint64_t base, var_lookup &table)
+builtin_fail(const vector<p_term> &args, uint64_t base, var_lookup &table)
 {
-	return make_pair(control::logical_not, vector<uint64_t>());
+	return make_pair(control::none, vector<uint64_t>());
 }
 
 optional<pair<control, vector<uint64_t>>>
@@ -256,9 +256,9 @@ unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
 	{ ">",    {builtin_gt,      2}},
 	{ "=<",   {builtin_le,      2}},
 	{ ">=",   {builtin_ge,      2}},
-	{ "\\+",  {non_provable,    1}},
 	{ "==",   {literal_compare, 2}},
-	{ "!",    {builtin_cut,     0}}
+	{ "!",    {builtin_cut,     0}},
+	{ "fail", {builtin_fail,    0}}
 };
 
 optional<pair<control, vector<uint64_t>>>

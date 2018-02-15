@@ -32,7 +32,7 @@ using p_structure = shared_ptr<structure>;
 using bind_value = variant<int, float, p_structure>;
 using var_lookup = unordered_map<uint64_t, bind_value>;
 
-enum class control { none, logical_not, cut };
+enum class control { none, cut };
 
 optional<vector<uint64_t>>
 unification(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &,
@@ -43,7 +43,4 @@ void print_all(
 bool execute_is(p_term &);
 optional<pair<control, vector<uint64_t>>>
      builtin(const p_term &, uint64_t, var_lookup &);
-
-bool can_unwrap(const p_term &, uint64_t, var_lookup &);
-const p_term &unwrap(const p_term &, uint64_t, var_lookup &);
 bool compare_terms(const p_term &, const p_term &, uint64_t, uint64_t, var_lookup &);

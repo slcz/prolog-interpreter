@@ -26,7 +26,6 @@ private:
 	vector<node>     children;
 	void expand(vector<uint64_t>);
 	control          flags;
-	bool             _solve();
 	void             do_cut();
 public:
 	node(const vector<p_clause> &_cls, var_lookup &_table,
@@ -78,24 +77,17 @@ bool node::try_unification()
 	auto u = builtin(*goal, base, table);
 	if (u) {
 		flags = u->first;
-		if (flags != control::logical_not) {
-			auto u2 = u->second;
-			if (!u2.empty())
-				bound_vars = move(u2);
-			first_clause = clauses.end();
-			return true;
-		}
-	}
-	assert(*goal);
-	if (flags == control::logical_not && !can_unwrap(*goal, base, table)) {
-		f = clauses.end();
-		return false;
+		auto u2 = u->second;
+		if (!u2.empty())
+			bound_vars = move(u2);
+		first_clause = clauses.end();
+		return true;
 	}
 	/* try unification */
 	for (; f != clauses.end(); f ++) {
+		assert(*goal);
 		assert((*f)->head);
-		auto u = unification((*f)->head, flags == control::logical_not?
-		    unwrap(*goal, base, table) : *goal, t, base, table);
+		auto u = unification((*f)->head, *goal, t, base, table);
 		if (u) {
 			expand(move(*u));
 			return true;
@@ -111,7 +103,7 @@ void node::do_cut()
 	stop_backtracking();
 }
 
-bool node::_solve()
+bool node::solve()
 {
 	while (true) {
 		if (children.empty()) {
@@ -136,17 +128,6 @@ bool node::_solve()
 				children.pop_back();
 		}
 	}
-}
-
-bool node::solve()
-{
-	bool r = _solve();
-	control f = flags;
-	if (f == control::logical_not)
-		flags = control::none;
-	if ((f == control::logical_not) && r)
-		remove_from_table(table, bound_vars);
-	return (f == control::logical_not) ^ r;
 }
 
 bool
