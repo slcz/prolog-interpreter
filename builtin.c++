@@ -248,17 +248,97 @@ literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table)
 		return nullopt;
 }
 
+string chars2atom(string src)
+{
+	if (src == "")
+		return "[]";
+	string t;
+	t.push_back(src[0]);
+	return ".(" + t + "," + chars2atom(string(src.begin() + 1, src.end())) + ")";
+}
+
+optional<string> atom2chars(const p_term &src)
+{
+	if (src->get_first()->get_type() != symbol::atom)
+		return nullopt;
+	string text = src->get_first()->get_text();
+	if (text == "[]")
+		return "";
+	if (text != ".")
+		return nullopt;
+	auto &r = src->get_rest();
+	if (r.size() != 2)
+		return nullopt;
+	if (r[0]->get_first()->get_type() != symbol::atom)
+		return nullopt;
+	if (r[0]->get_rest().size() != 0)
+		return nullopt;
+	string build = r[0]->get_first()->get_text();
+	if (build.size() != 1)
+		return nullopt;
+	auto k = atom2chars(r[1]);
+	if (!k)
+		return nullopt;
+	return build + *k;
+}
+
+vector<p_term> generated_terms;
+
+optional<pair<control, vector<uint64_t>>>
+atom_chars(const vector<p_term> &args, uint64_t base, var_lookup &table)
+{
+	p_term atom;
+
+	bind_value left  = build_target(args[0], base, table);
+	auto p = get_structure(left);
+	bind_value right = build_target(args[1], base, table);
+	auto q = get_structure(right);
+	if (!p && !q)
+		return nullopt;
+
+	if (p) {
+		auto &r = (*p)->get_root();
+		if (r->get_first()->get_type() != symbol::atom)
+			return nullopt;
+		if (!r->get_rest().empty())
+			return nullopt;
+		auto s = chars2atom(r->get_first()->get_text());
+		optional<p_term> a = get_term(s);
+		if (!a)
+			return nullopt;
+		if (!a)
+			return nullopt;
+		generated_terms.push_back(move(*a));
+		left = build_target(generated_terms.back(), base, table);
+		auto rtn = unification_sub(right, left, table);
+		if (!rtn)
+			return nullopt;
+		return make_pair(control::none, move(*rtn));
+	}
+	auto t = atom2chars((*q)->get_root());
+	if (!t)
+		return nullopt;
+	cout << *t << endl;
+	auto x = get_term(*t);
+	if (!x)
+		return nullopt;
+	generated_terms.push_back(move(*x));
+	right = build_target(generated_terms.back(), base, table);
+	return make_pair(control::none, *unification_sub(left, right, table));
+}
+
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
-	{ "is",   {builtin_is,      2}},
-	{ "=:=",  {builtin_eq,      2}},
-	{ "=\\=", {builtin_ne,      2}},
-	{ "<",    {builtin_lt,      2}},
-	{ ">",    {builtin_gt,      2}},
-	{ "=<",   {builtin_le,      2}},
-	{ ">=",   {builtin_ge,      2}},
-	{ "==",   {literal_compare, 2}},
-	{ "!",    {builtin_cut,     0}},
-	{ "fail", {builtin_fail,    0}}
+	{ "is",         {builtin_is,      2}},
+	{ "=:=",        {builtin_eq,      2}},
+	{ "=\\=",       {builtin_ne,      2}},
+	{ "<",          {builtin_lt,      2}},
+	{ ">",          {builtin_gt,      2}},
+	{ "=<",         {builtin_le,      2}},
+	{ ">=",         {builtin_ge,      2}},
+	{ "==",         {literal_compare, 2}},
+	{ "!",          {builtin_cut,     0}},
+	{ "fail",       {builtin_fail,    0}},
+	{ "atom_chars", {atom_chars,      2}},
 };
 
 optional<pair<control, vector<uint64_t>>>

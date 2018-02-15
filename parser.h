@@ -25,6 +25,8 @@ namespace {
 	using std::unordered_map;
 }
 
+extern unique_id atom_id, var_id;
+
 enum class symbol { none, atom, ignore, append, integer, decimal, string,
                     variable, error, lparen, rparen, lbracket, rbracket,
 	            eof, query, rules, comma, period, vbar, cut };
@@ -108,3 +110,4 @@ public:
 using p_clause = unique_ptr<clause>;
 
 bool program(vector<istream *>);
+optional<p_term> get_term(string);

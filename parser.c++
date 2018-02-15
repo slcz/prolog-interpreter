@@ -8,6 +8,9 @@
 
 using namespace std;
 
+unique_id atom_id;
+unique_id var_id;
+
 class syntax_error : public exception {
 private:
 	const position_t position;
@@ -192,8 +195,6 @@ private:
 	position_t position;
 public:
 	interp_context(vector<istream *>is):ins{is}, offset{0}, position{0,0} {}
-	unique_id atom_id;
-	unique_id var_id;
 	unique_ptr<token> get_token();
 	void ins_transformer(transformer_t t) { transformers.insert(t); }
 	void rmv_transformer(transformer_t t) { transformers.erase(t);  }
@@ -412,8 +413,7 @@ exp_return check_op(exp_param &param,
 		op_t &op = param.context.ops.getop(r.tok->get_text(),
 				param.priority);
 		if (!op.null() && op.get_pred() == param.priority) {
-			uint64_t id = param.context.atom_id.get_id(
-					r.tok->get_text());
+			uint64_t id = atom_id.get_id(r.tok->get_text());
 			r.tok->id = id;
 			return f(param, op, r);
 		}
@@ -541,7 +541,7 @@ optional<p_term> parse_list(interp_context &context)
 		if (t->get_type() == symbol::rbracket) {
 			auto n = make_unique<token>(symbol::atom);
 			n->set_text("[]");
-			uint64_t id = context.atom_id.get_id(n->get_text());
+			uint64_t id = atom_id.get_id(n->get_text());
 			n->id = id;
 			rnode = make_unique<term>(move(n));
 		} else if (t->get_type() == symbol::vbar) {
@@ -564,7 +564,7 @@ optional<p_term> parse_list(interp_context &context)
 		v.push_back(move(lnode));
 		v.push_back(move(rnode));
 		n->set_text(".");
-		uint64_t id = context.atom_id.get_id(n->get_text());
+		uint64_t id = atom_id.get_id(n->get_text());
 		n->id = id;
 		return make_unique<term>(move(n), move(v));
 	} else
@@ -590,7 +590,7 @@ optional<p_term> parse_term(interp_context &context)
 		t->set_int_value(stoi(t->get_text()));
 		r = make_unique<term>(move(t));
 	} else if (t->get_type() == symbol::atom) {
-		uint64_t id = context.atom_id.get_id(t->get_text());
+		uint64_t id = atom_id.get_id(t->get_text());
 		t->id = id;
 		unique_ptr<token> next = context.get_token();
 		if (next->get_type() == symbol::lparen) {
@@ -606,7 +606,7 @@ optional<p_term> parse_term(interp_context &context)
 			r = make_unique<term>(move(t));
 		}
 	} else if (t->get_type() == symbol::variable) {
-		uint64_t id = context.var_id.get_id(t->get_text());
+		uint64_t id = var_id.get_id(t->get_text());
 		t->id = id;
 		r = make_unique<term>(move(t));
 	} else {
@@ -639,7 +639,7 @@ optional<p_clause> parse_clause(interp_context &context)
 	unique_ptr<token> t;
 
 	// start a new scope
-	context.var_id.clear();
+	var_id.clear();
 	// head
 	head = parse_expression(context);
 	if (!head) {
@@ -680,7 +680,7 @@ vector<p_term> parse_query(interp_context &context)
 		return goals;
 	}
 	// start a new scope
-	context.var_id.clear();
+	var_id.clear();
 	goals = many(context, parse_expression, symbol::comma);
 	if (goals.empty())
 		throw syntax_error(*t, "at least 1 goal is expected after ?-");
@@ -726,6 +726,17 @@ void scan_vars(const p_term &t, uint64_t base,
 	}
 }
 
+optional<p_term> get_term(string source)
+{
+	vector<istream *>ios;
+	stringstream s {source};
+	ios.push_back(&s);
+	interp_context context {ios};
+	context.ins_transformer(string_transformer);
+	var_id.clear();
+	return parse_expression(context);
+}
+
 bool program(vector<istream *>ios)
 {
 	interp_context context {ios};
@@ -740,7 +751,7 @@ bool program(vector<istream *>ios)
 			if ((c = parse_clause(context))) {
 				cs.push_back(move(*c));
 			} else if (!(q = parse_query(context)).empty()) {
-				solve(cs, q, context.var_id.max());
+				solve(cs, q, var_id.max());
 			}
 			unique_ptr<token> t = context.get_token();
 			if (t->get_type() != symbol::eof)
