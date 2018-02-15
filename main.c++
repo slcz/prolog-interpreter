@@ -5,11 +5,23 @@
  *
  *****************************************************************************/
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include "parser.h"
 
 using namespace std;
 
-int main()
+int main(int argc, char **argv)
 {
-	return program() ? 0 : 1;
+	vector<istream *> ios;
+	stringstream builtin_predicates {builtin_list};
+	ios.push_back(&builtin_predicates);
+	for (int i = 1; i < argc; i ++) {
+		ifstream *fs = new ifstream();
+	       	fs->open(argv[i], fstream::in); 
+		ios.push_back(fs);
+	}
+	ios.push_back(&cin);
+	reverse(ios.begin(), ios.end());
+	return program(ios) ? 0 : 1;
 }

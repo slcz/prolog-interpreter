@@ -107,4 +107,4 @@ public:
 };
 using p_clause = unique_ptr<clause>;
 
-bool program();
+bool program(vector<istream *>);

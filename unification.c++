@@ -96,7 +96,6 @@ bool loop(uint64_t id, const bind_value &value, const var_lookup &table)
 			return true;
 		return loop(id, tmp, table);
 	} else {
-		assert(t->get_type() == symbol::atom);
 		for (const auto &i : root->get_rest()) {
 			bind_value ptmp {make_shared<structure>(i, offset)};
 			if (!loop(id, ptmp, table))
@@ -332,9 +331,13 @@ print_term(const bind_value &value, var_lookup &table)
 	cout << first->get_text();
 	if (t->get_type() == symbol::atom && !rest.empty()) {
 		cout << "(";
-		for (auto &i : rest) {
-			p_structure a = make_shared<structure>(i, offset);
+		auto i = rest.begin();
+		while (i != rest.end()) {
+			p_structure a = make_shared<structure>(*i, offset);
 			print_term(a, table);
+			i ++;
+			if (i != rest.end())
+				cout << ", ";
 		}
 		cout << ")";
 	}

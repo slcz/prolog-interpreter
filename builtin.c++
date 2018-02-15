@@ -35,10 +35,18 @@ template <typename R1, typename R2>
 optional<arith_type> binary_op(arith_type a0, arith_type a1,
     function<R1(int,int)> intf, function<R2(float,float)> floatf)
 {
+	arith_type t0 = a0, t1 = a1;
 	if (!intf) {
-		if (!holds_alternative<float>(a0) ||
-		    !holds_alternative<float>(a1))
-			return nullopt;
+		if (holds_alternative<int>(a0)) {
+			auto f = get<int>(a0);
+			float f1 = (float)f;
+			t0 = arith_type(f1);
+		}
+		if (!holds_alternative<float>(a1)) {
+			auto f = get<int>(a1);
+			float f1 = (float)f;
+			t1 = arith_type(f1);
+		}
 	}
 	if (!floatf) {
 		if (!holds_alternative<int>(a0) ||
@@ -46,18 +54,18 @@ optional<arith_type> binary_op(arith_type a0, arith_type a1,
 			return nullopt;
 	}
 	return visit(overloaded {
-	[&] (int a0) -> arith_type {
+	[&] (int t0) -> arith_type {
 		return visit(overloaded {
-			[&] (int a1) { return arith_type {intf(a0,a1)}; },
-			[&] (float a1){return arith_type {floatf(a0,a1)}; }},
-			a1);
+			[&] (int t1) { return arith_type {intf(t0,t1)}; },
+			[&] (float t1){return arith_type {floatf(t0,t1)}; }},
+			t1);
 	},
-	[&] (float a0) -> arith_type {
+	[&] (float t0) -> arith_type {
 		return visit(overloaded {
-			[&] (int a1) { return arith_type { floatf(a0,a1) }; },
-			[&] (float a1){ return arith_type { floatf(a0,a1)}; }},
-			a1);
-	} }, a0);
+			[&] (int t1) { return arith_type { floatf(t0,t1) }; },
+			[&] (float t1){ return arith_type { floatf(t0,t1)}; }},
+			t1);
+	} }, t0);
 }
 
 optional<arith_type> add(vector<arith_type> args) {
@@ -74,7 +82,7 @@ optional<arith_type> mul(vector<arith_type> args) {
 	return binary_op<int,float>(args[0], args[1], multiplies<>(), multiplies<>()); }
 
 optional<arith_type> div(vector<arith_type> args) {
-	return binary_op<int,float>(args[0], args[1], divides<>(), divides<>()); }
+	return binary_op<int,float>(args[0], args[1], nullptr, divides<>()); }
 
 optional<arith_type> idiv(vector<arith_type> args) {
 	return binary_op<int,float>(args[0], args[1], divides<>(), nullptr); }
