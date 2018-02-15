@@ -145,8 +145,8 @@ struct token_parser_entry {
 	{regex("^\\]"),                         symbol::rbracket},
 	{regex("^\\("),                         symbol::lparen  },
 	{regex("^\\)"),                         symbol::rparen  },
-	{regex("^[[:digit:]]+\\.[[:digit:]]+"), symbol::decimal },
-	{regex("^[[:digit:]]+"),                symbol::integer },
+	{regex("^[\\-]?[[:digit:]]+\\.[[:digit:]]+"), symbol::decimal },
+	{regex("^[\\-]?[[:digit:]]+"),          symbol::integer },
 	{regex("^[[:lower:]][[:alnum:]_]*"),    symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
@@ -715,6 +715,8 @@ void scan_vars(const p_term &t, uint64_t base,
 	if (head->get_type() == symbol::variable) {
 		uint64_t id = head->id + base;
 		string s = head->get_text();
+		if (s == "_")
+			return;
 		auto i = m.find(id);
 		if (i == m.end())
 			m.insert(make_pair<uint64_t,string>(move(id), move(s)));

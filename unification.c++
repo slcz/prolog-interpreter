@@ -73,12 +73,6 @@ failure:
 	return nullopt;
 }
 
-inline bool
-wildcard(const unique_ptr<token> &a)
-{
-	return a->get_type() == symbol::variable && a->get_text() == "_";
-}
-
 // returns false if variable table loop is detected.
 bool loop(uint64_t id, const bind_value &value, const var_lookup &table)
 {
@@ -108,17 +102,11 @@ bool loop(uint64_t id, const bind_value &value, const var_lookup &table)
 
 optional<uint64_t> bind(p_structure &from, bind_value to, var_lookup &table)
 {
-	if (wildcard(from->get_root()->get_first()))
-		return 0;
 	uint64_t id = from->get_id();
-	assert(id != 0);
 	if (!holds_alternative<p_structure>(to)) {
 		table.insert(make_pair(id, move(to)));
 		return id;
 	}
-	const p_structure &t = get<p_structure>(to);
-	if (wildcard(t->get_root()->get_first()))
-		return 0;
 	if (!loop(id, to, table))
 		return nullopt;
 	table.insert(make_pair(id, move(to)));
@@ -149,11 +137,8 @@ unify_variable(p_structure &src, bind_value dst, var_lookup &table)
 {
 	vector<uint64_t> all;
 	optional<uint64_t> key = bind(src, move(dst), table);
-	if (key) {
-		/* wildcard matching */
-		if (*key != 0)
-			all.push_back(*key);
-	}
+	if (key)
+		all.push_back(*key);
 	return all;
 }
 

@@ -14,6 +14,10 @@ public:
 	void clear() { id_map.clear(); }
 	uint64_t max() const {return magic;}
 	uint64_t get_id(const std::string &name) {
+		if (name == "_") {
+			magic ++;
+			return magic;
+		}
 		auto i = id_map.find(name);
 		if (i == id_map.end()) {
 			magic ++;
