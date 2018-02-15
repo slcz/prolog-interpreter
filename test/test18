@@ -1,0 +1,19 @@
+?- X = 1 + 2.
+?- X is 1 + 2.
+?- X is 3 / 2, Y is 3 // 2.
+?- X is 5 - 2 - 1.
+?- 277 * 37 > 10000.
+
+born(chris, 1952).
+born(tom, 1961).
+born(zach, 2012).
+born(bill, 1960).
+born(jim,  1950).
+
+?- born(Name, Year),
+   Year >= 1950,
+   Year =< 1960.
+
+?- 1+2=:=2+1.
+?- 1+2 = 2 + 1.
+?- 1 + A = B + 2.

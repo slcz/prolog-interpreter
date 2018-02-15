@@ -1,0 +1,13 @@
+snake(a).
+animal(b).
+snake(c).
+animal(d).
+likes(mary, X) :- snake(X), !, fail.
+likes(mary, X) :- animal(X).
+different2(X,Y) :- \+ (X = Y).
+
+r(a).
+q(b).
+p(X) :- \+ r(X).
+?- q(X), p(X).
+?- p(X), q(X).
