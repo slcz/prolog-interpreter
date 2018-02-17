@@ -64,48 +64,55 @@ optional<p_bind_value> eval_arith(p_bind_value node, var_lookup &table)
 	return nullopt;
 }
 
-optional<int> composite_t::getint(var_lookup &table)
+template<typename T>
+optional<T> composite_access(composite_t &c, var_lookup &table,
+    function<optional<T>(p_bind_value &)> access,
+    const unordered_map<string, function<T(T,T)>> & binary_fns,
+    const unordered_map<string, function<T(T)>> & unary_fns)
 {
-	const vector<p_term> &r = get_root()->get_rest();
-	vector<int> list;
+	const vector<p_term> &r = c.get_root()->get_rest();
+	vector<T> list;
 	for (auto &i : r) {
-		p_bind_value v = create_bind_value(i, get_base(), table);
-		optional<int> t = v->getint(table);
+		p_bind_value v = create_bind_value(i, c.get_base(), table);
+		optional<T> t = access(v);
 		if (!t) return nullopt;
 		list.push_back(*t);
 	}
-	return eval(bi, ui, list, table);
+	return c.eval(binary_fns, unary_fns, list, table);
+}
+
+optional<int> composite_t::getint(var_lookup &table)
+{
+	return composite_access<int>(*this, table, [&](p_bind_value &p)
+			{ return p->getint(table); }, bi, ui);
 }
 
 optional<float> composite_t::getdecimal(var_lookup &table)
 {
-	auto &r = get_root()->get_rest();
-	vector<float> list;
-	for (auto &i : r) {
-		p_bind_value v = create_bind_value(i, get_base(), table);
-		optional<float> t = v->getdecimal(table);
-		if (!t) {
-			optional<int> i = v->getint(table);
-			if (!i)
-				return nullopt;
-			list.push_back((float)*i);
-		} else
-			list.push_back(*t);
-	}
-	return eval(bf, uf, list, table);
+	return composite_access<float>(*this, table, [&](p_bind_value &p)
+			{ return p->getdecimal(table); }, bf, uf);
 }
 
-#define variable_get(name, type) \
-optional<type> variable_t::name(var_lookup &table) \
-{ \
-	const p_bind_value & n = walk(p_bind_value {nullptr}, table); \
-	if (!n) \
-		return nullopt; \
-	return n->getint(table); \
+template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
+    function<optional<T>(const p_bind_value &)> access)
+{
+	const p_bind_value & n = c.walk(p_bind_value {nullptr}, table);
+	if (!n)
+		return nullopt;
+	return access(n);
 }
 
-variable_get(getint, int)
-variable_get(getdecimal, float)
+optional<int> variable_t::getint(var_lookup &t)
+{
+	return
+	var_access<int>(*this, t, [&](const p_bind_value &p) { return p->getint(t);});
+}
+
+optional<float> variable_t::getdecimal(var_lookup &t)
+{
+	return
+	var_access<float>(*this,t,[&](const p_bind_value &p){return p->getdecimal(t);});
+}
 
 optional<builtin_t>
 builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table,
