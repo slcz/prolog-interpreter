@@ -8,57 +8,54 @@
 
 using namespace std;
 
-const unordered_map<string, function<int(int,int)>> bi = {
-	{ "+", plus<>()},
-	{ "-", minus<>()},
-	{ "*", multiplies<>()},
-	{ "//",divides<>()},
-};
-
-const unordered_map<string, function<float(float,float)>> bf = {
-	{ "+",  plus<>()},
-	{ "-",  minus<>()},
-	{ "*",  multiplies<>()},
-	{ "/",  divides<>()}
-};
-
-const unordered_map<string, function<int(int)>> ui = {
-	{ "-", negate<>()}
-};
-const unordered_map<string, function<float(float)>> uf = {
-	{ "-", negate<>()}
-};
-
-template<typename T>
-optional<T> eval(composite_t &c,
-    function<optional<T>(p_bind_value &)> access,
-    const unordered_map<string, function<T(T,T)>> & binary_fns,
-    const unordered_map<string, function<T(T)>> & unary_fns, var_lookup &table)
+template<typename T> optional<vector<T>>
+eval_extract(composite_t &c, function<optional<T>(p_bind_value &)> access,
+   var_lookup &table, const char *op, size_t nargs)
 {
 	auto &f = c.get_root()->get_first();
 	auto &r = c.get_root()->get_rest();
-	auto m = unary_fns.find(f->get_text());
-	auto n = binary_fns.find(f->get_text());
-	p_bind_value v0 = create_bind_value(r[0], c.get_base(), table);
-	p_bind_value v1;
-	optional<T> a0 = access(v0), a1;
-	if (!a0)
+	if (f->get_text() != string(op) || r.size() != nargs)
 		return nullopt;
-	switch (r.size()) {
-		case 1:
-			if (m == unary_fns.end())
-				return nullopt;
-			return m->second(*a0);
-		case 2:
-			v1 = create_bind_value(r[1], c.get_base(), table);
-			if (n == binary_fns.end())
-				return nullopt;
-			a1 = access(v1);
-			if (!a1)
-				return nullopt;
-			return n->second(*a0, *a1);
-		default: return nullopt;
+	vector<T> build;
+	for (auto &item : r) {
+		p_bind_value v = create_bind_value(item, c.get_base(), table);
+		optional<T> a = access(v);
+		if (!a)
+			return vector<T>();
+		build.push_back(*a);
 	}
+	return build;
+}
+
+template<typename T> optional<T> eval(composite_t &,
+    function<optional<T>(p_bind_value &)>, var_lookup &) { return nullopt; }
+
+template<typename T, typename... Args>
+optional<T> eval(composite_t &c,
+    function<optional<T>(p_bind_value &)> access, var_lookup &table,
+    const char *op, function<T(T)> fn, Args... args)
+{
+	const size_t fnargs = 1;
+	optional<vector<T>> v = eval_extract(c, access, table, op, fnargs);
+	if (!v)
+		return eval<T>(c, access, table, args...);
+	if (v->size() != fnargs)
+		return nullopt;
+	return fn((*v)[0]);
+}
+
+template<typename T, typename... Args>
+optional<T> eval(composite_t &c,
+    function<optional<T>(p_bind_value &)> access, var_lookup &table,
+    const char *op, function<T(T,T)> fn, Args... args)
+{
+	const size_t fnargs = 2;
+	optional<vector<T>> v = eval_extract(c, access, table, op, fnargs);
+	if (!v)
+		return eval<T>(c, access, table, args...);
+	if (v->size() != fnargs)
+		return nullopt;
+	return fn((*v)[0], (*v)[1]);
 }
 
 optional<p_bind_value> eval_arith(p_bind_value node, var_lookup &table)
@@ -75,18 +72,22 @@ optional<p_bind_value> eval_arith(p_bind_value node, var_lookup &table)
 optional<int> composite_t::getint(var_lookup &table)
 {
 	return eval<int>(*this, [&](p_bind_value &p)
-			{ return p->getint(table); }, bi, ui, table);
+	{ return p->getint(table); }, table,
+	"+", plus<>(),   "-", minus<>(),
+	"-", negate<>(), "*", multiplies<>(), "//", divides<>());
 }
 
 optional<float> composite_t::getdecimal(var_lookup &table)
 {
 	return eval<float>(*this, [&](p_bind_value &p) -> optional<float> {
-		auto i = p->getdecimal(table);
-		if (!i) {
-			auto j = p->getint(table);
-			if (!j) return nullopt;
-			return float(*j);
-		} else return *i; }, bf, uf, table);
+		auto r = p->getdecimal(table);
+		auto i = p->getint(table);
+		if (r) return *r;
+		if (i) return float(*i);
+		return nullopt;
+	}, table,
+	"+", plus<>(),   "-", minus<>(),
+	"-", negate<>(), "*", multiplies<>(), "/", divides<>());
 }
 
 template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
