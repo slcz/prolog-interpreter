@@ -39,7 +39,6 @@ private:
 	position_t position;
 	int        int_value;
 	float      decimal_value;
-	bool       isint;
 public:
 	token(symbol type) : token_type { type } {}
 	token() : token(symbol::error) {}

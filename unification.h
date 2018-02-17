@@ -81,7 +81,7 @@ class primitive_t : public bind_value {
 private:
 	const T value;
 public:
-	string tostring(const var_lookup &)
+	string tostring(const var_lookup &) override
 	{ stringstream os; os << value; return os.str(); }
 	primitive_t(const T v) : value {v} {}
 	maybe_ids unification(p_bind_value &, var_lookup &, bool) override;
