@@ -95,21 +95,17 @@ optional<float> composite_t::getdecimal(var_lookup &table)
 	return eval(bf, uf, list, table);
 }
 
-optional<int> variable_t::getint(var_lookup &table)
-{
-	const p_bind_value & n = walk(p_bind_value {nullptr}, table);
-	if (!n)
-		return nullopt;
-	return n->getint(table);
+#define variable_get(name, type) \
+optional<type> variable_t::name(var_lookup &table) \
+{ \
+	const p_bind_value & n = walk(p_bind_value {nullptr}, table); \
+	if (!n) \
+		return nullopt; \
+	return n->getint(table); \
 }
 
-optional<float> variable_t::getdecimal(var_lookup &table)
-{
-	const p_bind_value & n = walk(p_bind_value {nullptr}, table);
-	if (!n)
-		return nullopt;
-	return n->getdecimal(table);
-}
+variable_get(getint, int)
+variable_get(getdecimal, float)
 
 optional<builtin_t>
 builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table,
