@@ -105,6 +105,5 @@ public:
 maybe_ids unification(const p_term &, const p_term &, uint64_t,
     uint64_t, var_lookup &, bool compare_only = false);
 void remove_from_table(var_lookup &, const vector<uint64_t> &);
-void print_all(const unordered_map<uint64_t, string> &, const var_lookup);
 p_bind_value create_bind_value(const p_term &, uint64_t, const var_lookup &);
 optional<builtin_t> builtin(const p_term &, uint64_t, var_lookup &);

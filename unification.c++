@@ -172,14 +172,3 @@ ostream &operator<<(ostream &os, const bind_env &b)
 	os << b.node->tostring(b.map);
 	return os;
 }
-
-void
-print_all(const unordered_map<uint64_t, string> &v, const var_lookup table)
-{
-	for (auto &i :v) {
-		auto n = table.find(i.first);
-		if (n == table.end())
-			continue;
-		cout << i.second << "=>" << bind_env{n->second, table} << endl;
-	}
-}

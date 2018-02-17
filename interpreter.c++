@@ -152,10 +152,16 @@ solve(const vector<p_clause> &clauses, const vector<p_term> &query, uint64_t max
 	    query.end(), move(child)};
 	while (root.solve()) {
 		solved = true;
-		print_all(var_map, table);
-		cout << "yes" << endl;
+		for (auto &i : var_map) {
+			auto n = table.find(i.first);
+			if (n == table.end())
+				continue;
+			cout << i.second << "=>" << bind_env{n->second, table}
+			     << endl;
+		}
+		if (var_map.empty()) cout << "yes" << endl;
 	}
-	if (!solved) cout << "no"; else cout << "no-more";
+	if (!solved) cout << "no";
 	cout << endl;
 	return solved;
 }
