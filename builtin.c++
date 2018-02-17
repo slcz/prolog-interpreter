@@ -3,6 +3,7 @@
 #include <vector>
 #include <variant>
 #include <functional>
+#include <cmath>
 #include "parser.h"
 #include "unification.h"
 
@@ -84,18 +85,51 @@ optional<float> access_decimal(p_bind_value &p, var_lookup &table)
 	return nullopt;
 }
 
+#define MATH_BIN_FUNCTOR(n, f) \
+template<typename T = float> \
+struct n { T operator() (T l, T r) { return f(l, r);}}
+
+#define MATH_UNA_FUNCTOR(n, f) \
+template<typename T = float> \
+struct n { T operator() (T l) { return f(l);}}
+
+MATH_BIN_FUNCTOR(power,     powf);
+MATH_UNA_FUNCTOR(abs_f,     abs);
+MATH_UNA_FUNCTOR(atan_f,    atanf);
+MATH_UNA_FUNCTOR(ceiling_f, ceil);
+MATH_UNA_FUNCTOR(cos_f,     cosf);
+MATH_UNA_FUNCTOR(exp_f,     expf);
+MATH_UNA_FUNCTOR(sqrt_f,    sqrtf);
+MATH_UNA_FUNCTOR(floor_f,   floorf);
+MATH_UNA_FUNCTOR(log_f,     logf);
+MATH_UNA_FUNCTOR(sin_f,     sinf);
+MATH_UNA_FUNCTOR(truncate_f,truncf);
+MATH_UNA_FUNCTOR(round_f,   roundf);
+
+template<typename T = int>
+struct rshift { T operator() (T l, T r) { return l >> r;}};
+
+template<typename T = int>
+struct lshift { T operator() (T l, T r) { return l << r;}};
+
 optional<int> composite_t::getint(var_lookup &table)
 {
 	return eval<int>(*this, access_int, table,
-	"+", plus<>(),   "-", minus<>(),
-	"-", negate<>(), "*", multiplies<>(), "//", divides<>());
+	"+", plus<>(),   "-", minus<>(), "rem",modulus<>(),
+	"-", negate<>(), "*", multiplies<>(), "//", divides<>(),
+	">>",rshift<>(), "<<",lshift<>(), "/\\", bit_and<>(),
+	"\\/", bit_or<>(), "\\", bit_not<>());
 }
 
 optional<float> composite_t::getdecimal(var_lookup &table)
 {
 	return eval<float>(*this, access_decimal, table,
-	"+", plus<>(),   "-", minus<>(),
-	"-", negate<>(), "*", multiplies<>(), "/", divides<>());
+	"+", plus<>(),   "-", minus<>(), "-", negate<>(), "*", multiplies<>(),
+	"/", divides<>(),  "**", power<>(), "abs", abs_f<>(),
+	"atan", atan_f<>(), "ceiling", ceiling_f<>(), "cos", cos_f<>(),
+	"exp", exp_f<>(), "sqrt", sqrt_f<>(), "floor", floor_f<>(),
+	"log", log_f<>(), "sin", sin_f<>(), "truncate", truncate_f<>(),
+	"round", round_f<>());
 }
 
 template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
@@ -109,16 +143,14 @@ template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
 
 optional<int> variable_t::getint(var_lookup &t)
 {
-	return
-	var_access<int>(*this, t, [&](const p_bind_value &p) {
-			return p->getint(t);});
+	return var_access<int>(*this, t,
+	[&](const p_bind_value &p) {return p->getint(t);});
 }
 
 optional<float> variable_t::getdecimal(var_lookup &t)
 {
-	return
-	var_access<float>(*this,t,[&](const p_bind_value &p){
-			return p->getdecimal(t);});
+	return var_access<float>(*this, t,
+	[&](const p_bind_value &p){ return p->getdecimal(t);});
 }
 
 optional<builtin_t>
