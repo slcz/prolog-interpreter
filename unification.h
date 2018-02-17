@@ -29,7 +29,8 @@ using builtin_t = pair<control, vector<uint64_t>>;
 
 class bind_value {
 public:
-	virtual optional<builtin_t> builtin(uint64_t, var_lookup &)  { return nullopt; }
+	virtual optional<builtin_t> builtin(uint64_t, var_lookup &, struct env &)
+	{ return nullopt; }
 	virtual string tostring(const var_lookup &) = 0;
 	virtual bool loop(uint64_t id, const var_lookup &) { return false; }
 	virtual maybe_ids unification(p_bind_value &, var_lookup &, bool) = 0;
@@ -52,7 +53,7 @@ public:
 	const p_term &get_root() const { return root; }
 	maybe_ids unification(p_bind_value &, var_lookup &, bool) override;
 	virtual uint64_t get_id() { return root->get_first()->id; }
-	optional<builtin_t> builtin(uint64_t, var_lookup &) override;
+	optional<builtin_t> builtin(uint64_t, var_lookup &, struct env&)override;
 	optional<int> getint(var_lookup &t) override;
 	optional<float> getdecimal(var_lookup&t) override;
 	optional<string> list2string(const var_lookup &);
@@ -102,4 +103,4 @@ maybe_ids unification(const p_term &, const p_term &, uint64_t,
     uint64_t, var_lookup &, bool compare_only = false);
 void remove_from_table(var_lookup &, const vector<uint64_t> &);
 p_bind_value create_bind_value(const p_term &, uint64_t, const var_lookup &);
-optional<builtin_t> builtin(const p_term &, uint64_t, var_lookup &);
+optional<builtin_t> builtin(const p_term &, uint64_t, var_lookup &, struct env&);

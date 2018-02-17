@@ -85,6 +85,11 @@ public:
 };
 using p_term  = unique_ptr<term>;
 
+struct env {
+	uint64_t           max_id;
+	vector<p_term>     generated;
+};
+
 void scan_vars(const p_term&, uint64_t, unordered_map<uint64_t, string>&);
 uint64_t find_max_ids(const p_term&);
 

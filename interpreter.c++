@@ -38,8 +38,8 @@ public:
 	node(_cls, _table, fst, _goal, _base, _top)
 	{ last_child = b; children.push_back(move(c)); }
 	void stop_backtracking() { first_clause = clauses.end(); }
-	bool solve();
-	bool try_unification();
+	bool solve(struct env &);
+	bool try_unification(struct env &);
 	control get_flags() { return flags; }
 	optional<unique_ptr<node>> sibling(term_iter end) {
 		term_iter n = goal + 1;
@@ -67,14 +67,14 @@ void node::expand(vector<uint64_t> vars)
 	first_clause ++;
 }
 
-bool node::try_unification()
+bool node::try_unification(struct env &env)
 {
 	auto &f = first_clause;
 	uint64_t t = top;
 
 	if (first_clause == clauses.end())
 		return false;
-	auto u = builtin(*goal, base, table);
+	auto u = builtin(*goal, base, table, env);
 	if (u) {
 		flags = u->first;
 		auto u2 = u->second;
@@ -103,12 +103,12 @@ void node::do_cut()
 	stop_backtracking();
 }
 
-bool node::solve()
+bool node::solve(struct env &env)
 {
 	while (true) {
 		if (children.empty()) {
 			remove_from_table(table, bound_vars);
-			if (!try_unification())
+			if (!try_unification(env))
 				return false;
 			else if (children.empty())
 				return true;
@@ -116,7 +116,7 @@ bool node::solve()
 
 		while (!children.empty()) {
 			node &last = children.back();
-			if (last.solve()) {
+			if (last.solve(env)) {
 				if (last.flags == control::cut)
 					do_cut();
 				optional<unique_ptr<node>> next;
@@ -131,11 +131,12 @@ bool node::solve()
 }
 
 bool
-solve(const vector<p_clause> &clauses, const vector<p_term> &query, uint64_t max_id)
+solve(const vector<p_clause> &clauses, const vector<p_term> &query,
+    struct env &env)
 {
 	unordered_map<uint64_t, string> var_map;
 	var_lookup table;
-	uint64_t id = max_id + 1, top = id, m;
+	uint64_t id = env.max_id + 1, top = id, m;
 	bool solved = false;
 
 	assert(!query.empty());
@@ -150,7 +151,7 @@ solve(const vector<p_clause> &clauses, const vector<p_term> &query, uint64_t max
 	node child {clauses, table, clauses.begin(), query.begin(), id, top};
 	node root  {clauses, table, clauses.end(),   query.begin(), id, top,
 	    query.end(), move(child)};
-	while (root.solve()) {
+	while (root.solve(env)) {
 		solved = true;
 		for (auto &i : var_map) {
 			auto n = table.find(i.first);

@@ -744,6 +744,7 @@ bool program(vector<istream *>ios)
 	vector<p_clause> cs;
 	vector<p_term> q;
 	bool quit = false;
+	struct env env;
 
 	context.ins_transformer(string_transformer);
 	while (!quit) {
@@ -751,7 +752,9 @@ bool program(vector<istream *>ios)
 			if ((c = parse_clause(context))) {
 				cs.push_back(move(*c));
 			} else if (!(q = parse_query(context)).empty()) {
-				solve(cs, q, var_id.max());
+				env.max_id = var_id.max();
+				env.generated.clear();
+				solve(cs, q, env);
 			}
 			unique_ptr<token> t = context.get_token();
 			if (t->get_type() != symbol::eof)

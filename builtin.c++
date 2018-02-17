@@ -155,7 +155,7 @@ optional<float> variable_t::getdecimal(var_lookup &t)
 
 optional<builtin_t>
 builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table,
-		const string &)
+		const string &, struct env &)
 {
 	p_bind_value l = create_bind_value(args[0], base, table);
 	p_bind_value r = create_bind_value(args[1], base, table);
@@ -196,7 +196,7 @@ optional<builtin_t> _compare(const vector<p_term> &args, uint64_t base,
 }
 
 optional<builtin_t> builtin_compare(const vector<p_term> &args, uint64_t base,
-    var_lookup &table, const string &op)
+    var_lookup &table, const string &op, struct env &)
 {
 	auto rint = _compare<int>(args, base, table, op, access_int,
 		"=:=", equal_to<>(), "=\\=", not_equal_to<>(),
@@ -214,19 +214,22 @@ optional<builtin_t> builtin_compare(const vector<p_term> &args, uint64_t base,
 }
 
 optional<builtin_t>
-builtin_fail(const vector<p_term> &, uint64_t, var_lookup &, const string &)
+builtin_fail(const vector<p_term> &, uint64_t, var_lookup &, const string &,
+		struct env &)
 {
 	return make_pair(control::fail, vector<uint64_t>());
 }
 
 optional<builtin_t>
-builtin_cut(const vector<p_term> &, uint64_t, var_lookup &, const string &)
+builtin_cut(const vector<p_term> &, uint64_t, var_lookup &, const string &,
+		struct env &)
 {
 	return make_pair(control::cut, vector<uint64_t>());
 }
 
 optional<builtin_t>
-literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table, const string &)
+literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table,
+		const string &, struct env &)
 {
 	/* unification but don't change variable bindings */
 	auto r = unification(args[0], args[1], base, base, table, true);
@@ -237,7 +240,7 @@ literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table, co
 }
 
 using builtin_fn = optional<builtin_t>(*)(const vector<p_term> &,
-        uint64_t, var_lookup &, const string &);
+        uint64_t, var_lookup &, const string &, struct env &);
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
 	{ "is",         {builtin_is,      2}},
 	{ "=:=",        {builtin_compare, 2}},
@@ -252,7 +255,7 @@ unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
 };
 
 optional<builtin_t>
-composite_t::builtin(uint64_t base, var_lookup &table)
+composite_t::builtin(uint64_t base, var_lookup &table, struct env &env)
 {
 	auto m = builtin_map.find(get_root()->get_first()->get_text());
 	if (m == builtin_map.end())
@@ -260,15 +263,15 @@ composite_t::builtin(uint64_t base, var_lookup &table)
 	builtin_fn f = m->second.first;
 	if (m->second.second != get_root()->get_rest().size() || !f)
 		return nullopt;
-	auto r = f(get_root()->get_rest(), base, table, m->first);
+	auto r = f(get_root()->get_rest(), base, table, m->first, env);
 	return r;
 }
 
 optional<builtin_t>
-builtin(const p_term &term, uint64_t base, var_lookup &table)
+builtin(const p_term &term, uint64_t base, var_lookup &table, struct env &env)
 {
 	vector<uint64_t> nil = vector<uint64_t>();
 
 	p_bind_value value = create_bind_value(term, base, table);
-	return value->builtin(base, table);
+	return value->builtin(base, table, env);
 }
