@@ -9,8 +9,9 @@
 using namespace std;
 
 template<typename T> optional<vector<T>>
-eval_extract(composite_t &c, function<optional<T>(p_bind_value &)> access,
-   var_lookup &table, const char *op, size_t nargs)
+eval_extract(composite_t &c,
+    function<optional<T>(p_bind_value &, var_lookup &)> access,
+    var_lookup &table, const char *op, size_t nargs)
 {
 	auto &f = c.get_root()->get_first();
 	auto &r = c.get_root()->get_rest();
@@ -19,7 +20,7 @@ eval_extract(composite_t &c, function<optional<T>(p_bind_value &)> access,
 	vector<T> build;
 	for (auto &item : r) {
 		p_bind_value v = create_bind_value(item, c.get_base(), table);
-		optional<T> a = access(v);
+		optional<T> a = access(v, table);
 		if (!a)
 			return vector<T>();
 		build.push_back(*a);
@@ -27,13 +28,13 @@ eval_extract(composite_t &c, function<optional<T>(p_bind_value &)> access,
 	return build;
 }
 
-template<typename T> optional<T> eval(composite_t &,
-    function<optional<T>(p_bind_value &)>, var_lookup &) { return nullopt; }
+template<typename T> optional<T> eval(composite_t &, function<optional<T>(
+    p_bind_value &, var_lookup &)>, var_lookup &) { return nullopt; }
 
 template<typename T, typename... Args>
 optional<T> eval(composite_t &c,
-    function<optional<T>(p_bind_value &)> access, var_lookup &table,
-    const char *op, function<T(T)> fn, Args... args)
+    function<optional<T>(p_bind_value &, var_lookup &)> access,
+    var_lookup &table, const char *op, function<T(T)> fn, Args... args)
 {
 	const size_t fnargs = 1;
 	optional<vector<T>> v = eval_extract(c, access, table, op, fnargs);
@@ -46,8 +47,8 @@ optional<T> eval(composite_t &c,
 
 template<typename T, typename... Args>
 optional<T> eval(composite_t &c,
-    function<optional<T>(p_bind_value &)> access, var_lookup &table,
-    const char *op, function<T(T,T)> fn, Args... args)
+    function<optional<T>(p_bind_value &, var_lookup &)> access,
+    var_lookup &table, const char *op, function<T(T,T)> fn, Args... args)
 {
 	const size_t fnargs = 2;
 	optional<vector<T>> v = eval_extract(c, access, table, op, fnargs);
@@ -69,23 +70,30 @@ optional<p_bind_value> eval_arith(p_bind_value node, var_lookup &table)
 	return nullopt;
 }
 
+optional<int> access_int(p_bind_value &p, var_lookup &table)
+{
+	return p->getint(table);
+}
+
+optional<float> access_decimal(p_bind_value &p, var_lookup &table)
+{
+	auto r = p->getdecimal(table);
+	auto i = p->getint(table);
+	if (r) return *r;
+	if (i) return float(*i);
+	return nullopt;
+}
+
 optional<int> composite_t::getint(var_lookup &table)
 {
-	return eval<int>(*this, [&](p_bind_value &p)
-	{ return p->getint(table); }, table,
+	return eval<int>(*this, access_int, table,
 	"+", plus<>(),   "-", minus<>(),
 	"-", negate<>(), "*", multiplies<>(), "//", divides<>());
 }
 
 optional<float> composite_t::getdecimal(var_lookup &table)
 {
-	return eval<float>(*this, [&](p_bind_value &p) -> optional<float> {
-		auto r = p->getdecimal(table);
-		auto i = p->getint(table);
-		if (r) return *r;
-		if (i) return float(*i);
-		return nullopt;
-	}, table,
+	return eval<float>(*this, access_decimal, table,
 	"+", plus<>(),   "-", minus<>(),
 	"-", negate<>(), "*", multiplies<>(), "/", divides<>());
 }
@@ -102,13 +110,15 @@ template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
 optional<int> variable_t::getint(var_lookup &t)
 {
 	return
-	var_access<int>(*this, t, [&](const p_bind_value &p) { return p->getint(t);});
+	var_access<int>(*this, t, [&](const p_bind_value &p) {
+			return p->getint(t);});
 }
 
 optional<float> variable_t::getdecimal(var_lookup &t)
 {
 	return
-	var_access<float>(*this,t,[&](const p_bind_value &p){return p->getdecimal(t);});
+	var_access<float>(*this,t,[&](const p_bind_value &p){
+			return p->getdecimal(t);});
 }
 
 optional<builtin_t>
@@ -127,49 +137,47 @@ builtin_is(const vector<p_term> &args, uint64_t base, var_lookup &table,
 		return make_pair(control::none, move(*unify_rst));
 }
 
-unordered_map<string,function<bool(int,int)>> compare_op_int = {
-	{ "=:=",        equal_to<>(),    },
-	{ "=\\=",       not_equal_to<>(),},
-	{ "<",          less<>(),        },
-	{ ">",          greater<>(),     },
-	{ "=<",         less_equal<>(),  },
-	{ ">=",         greater_equal<>()},
-};
+template<typename T, typename... Args>
+optional<builtin_t> _compare(const vector<p_term> &, uint64_t, var_lookup &,
+    const string &, function<optional<T>(p_bind_value &, var_lookup &)>)
+{ return nullopt; }
 
-unordered_map<string,function<bool(float,float)>> compare_op_decimal = {
-	{ "=:=",        equal_to<>(),    },
-	{ "=\\=",       not_equal_to<>(),},
-	{ "<",          less<>(),        },
-	{ ">",          greater<>(),     },
-	{ "=<",         less_equal<>(),  },
-	{ ">=",         greater_equal<>()},
-};
-
-optional<builtin_t> builtin_compare(const vector<p_term> &args, uint64_t base,
-    var_lookup &table, const string &op)
+template<typename T, typename... Args>
+optional<builtin_t> _compare(const vector<p_term> &args, uint64_t base,
+    var_lookup &table, const string &op,
+    function<optional<T>(p_bind_value &, var_lookup &)> access,
+    const char *candidate, function<bool(T,T)> fn, Args... a)
 {
+	if (string(candidate) != op)
+		return _compare<T>(args, base, table, op, access, a...);
 	p_bind_value l = create_bind_value(args[0], base, table);
 	p_bind_value r = create_bind_value(args[1], base, table);
 	optional<p_bind_value> lr = eval_arith(l, table);
 	optional<p_bind_value> rr = eval_arith(r, table);
 	if (!lr || !rr)
 		return nullopt;
-	optional<int> a = (*lr)->getint(table);
-	optional<int> b = (*rr)->getint(table);
-	auto m = compare_op_int.find(op);
-	assert(m != compare_op_int.end());
-	if (a && b) {
-		if (m->second(*a, *b))
-			return make_pair(control::none, vector<uint64_t>());
-	}
-	optional<float> fa = (*lr)->getdecimal(table);
-	optional<float> fb = (*rr)->getdecimal(table);
-	auto n = compare_op_decimal.find(op);
-	assert(n != compare_op_decimal.end());
-	if (fa && fb) {
-		if (m->second(*fa, *fb))
-			return make_pair(control::none, vector<uint64_t>());
-	}
+	optional<T> a0 = access(*lr, table);
+	optional<T> a1 = access(*rr, table);
+	if (a0 && a1 && fn(*a0, *a1))
+		return make_pair(control::none, vector<uint64_t>());
+	return nullopt;
+}
+
+optional<builtin_t> builtin_compare(const vector<p_term> &args, uint64_t base,
+    var_lookup &table, const string &op)
+{
+	auto rint = _compare<int>(args, base, table, op, access_int,
+		"=:=", equal_to<>(), "=\\=", not_equal_to<>(),
+		"<",   less<>(), ">", greater<>(), "=<", less_equal<>(),
+		">=",  greater_equal<>());
+	if (rint)
+		return rint;
+	auto dint = _compare<float>(args, base, table, op, access_decimal,
+		"=:=", equal_to<>(), "=\\=", not_equal_to<>(),
+		"<",   less<>(), ">", greater<>(), "=<", less_equal<>(),
+		">=",  greater_equal<>());
+	if (dint)
+		return dint;
 	return nullopt;
 }
 

@@ -53,10 +53,6 @@ public:
 	maybe_ids unification(p_bind_value &, var_lookup &, bool) override;
 	virtual uint64_t get_id() { return root->get_first()->id; }
 	optional<builtin_t> builtin(uint64_t, var_lookup &) override;
-	template<typename T> optional<T> eval(
-	    const unordered_map<string, function<T(T,T)>> &,
-	    const unordered_map<string, function<T(T)>> &,
-	    vector<T> &, var_lookup &);
 	optional<int> getint(var_lookup &t) override;
 	optional<float> getdecimal(var_lookup&t) override;
 	optional<string> list2string(const var_lookup &);
