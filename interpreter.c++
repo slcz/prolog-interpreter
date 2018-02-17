@@ -81,7 +81,7 @@ bool node::try_unification()
 		if (!u2.empty())
 			bound_vars = move(u2);
 		first_clause = clauses.end();
-		return true;
+		return u->first == control::none || u->first == control::cut;
 	}
 	/* try unification */
 	for (; f != clauses.end(); f ++) {

@@ -12,3 +12,7 @@ accepts(S, []) :- final(S).
 accepts(S, [X | Rest]) :- trans(S, X, S1), accepts(S1, Rest).
 accepts(S, String) :- silent(S, S1), accepts(S1, String).
 
+?- accepts(s1, [a,a,a,b]).
+?- accepts(S, [a,b]).
+?- accepts(s1, [X1, X2, X3]).
+
