@@ -59,6 +59,7 @@ public:
 	    vector<T> &, var_lookup &);
 	optional<int> getint(var_lookup &t) override;
 	optional<float> getdecimal(var_lookup&t) override;
+	optional<string> list2string(const var_lookup &);
 };
 
 class variable_t : public composite_t {
