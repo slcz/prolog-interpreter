@@ -30,25 +30,33 @@ const unordered_map<string, function<float(float)>> uf = {
 };
 
 template<typename T>
-optional<T> composite_t::eval(
+optional<T> eval(composite_t &c,
+    function<optional<T>(p_bind_value &)> access,
     const unordered_map<string, function<T(T,T)>> & binary_fns,
-    const unordered_map<string, function<T(T)>> & unary_fns,
-    vector<T> &leaves, var_lookup &table)
+    const unordered_map<string, function<T(T)>> & unary_fns, var_lookup &table)
 {
-	auto &f = get_root()->get_first();
-	auto &r = get_root()->get_rest();
+	auto &f = c.get_root()->get_first();
+	auto &r = c.get_root()->get_rest();
 	auto m = unary_fns.find(f->get_text());
 	auto n = binary_fns.find(f->get_text());
-	assert(r.size() == leaves.size());
+	p_bind_value v0 = create_bind_value(r[0], c.get_base(), table);
+	p_bind_value v1;
+	optional<T> a0 = access(v0), a1;
+	if (!a0)
+		return nullopt;
 	switch (r.size()) {
 		case 1:
 			if (m == unary_fns.end())
 				return nullopt;
-			return m->second(leaves[0]);
+			return m->second(*a0);
 		case 2:
+			v1 = create_bind_value(r[1], c.get_base(), table);
 			if (n == binary_fns.end())
 				return nullopt;
-			return n->second(leaves[0], leaves[1]);
+			a1 = access(v1);
+			if (!a1)
+				return nullopt;
+			return n->second(*a0, *a1);
 		default: return nullopt;
 	}
 }
@@ -64,33 +72,21 @@ optional<p_bind_value> eval_arith(p_bind_value node, var_lookup &table)
 	return nullopt;
 }
 
-template<typename T>
-optional<T> composite_access(composite_t &c, var_lookup &table,
-    function<optional<T>(p_bind_value &)> access,
-    const unordered_map<string, function<T(T,T)>> & binary_fns,
-    const unordered_map<string, function<T(T)>> & unary_fns)
-{
-	const vector<p_term> &r = c.get_root()->get_rest();
-	vector<T> list;
-	for (auto &i : r) {
-		p_bind_value v = create_bind_value(i, c.get_base(), table);
-		optional<T> t = access(v);
-		if (!t) return nullopt;
-		list.push_back(*t);
-	}
-	return c.eval(binary_fns, unary_fns, list, table);
-}
-
 optional<int> composite_t::getint(var_lookup &table)
 {
-	return composite_access<int>(*this, table, [&](p_bind_value &p)
-			{ return p->getint(table); }, bi, ui);
+	return eval<int>(*this, [&](p_bind_value &p)
+			{ return p->getint(table); }, bi, ui, table);
 }
 
 optional<float> composite_t::getdecimal(var_lookup &table)
 {
-	return composite_access<float>(*this, table, [&](p_bind_value &p)
-			{ return p->getdecimal(table); }, bf, uf);
+	return eval<float>(*this, [&](p_bind_value &p) -> optional<float> {
+		auto i = p->getdecimal(table);
+		if (!i) {
+			auto j = p->getint(table);
+			if (!j) return nullopt;
+			return float(*j);
+		} else return *i; }, bf, uf, table);
 }
 
 template<typename T> optional<T> var_access(variable_t &c, var_lookup &table,
