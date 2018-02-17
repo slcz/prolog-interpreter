@@ -123,10 +123,34 @@ string variable_t::tostring(const var_lookup &table)
 	return os.str();
 }
 
+optional<string> composite_t::list2string(const var_lookup &table)
+{
+	string s1, s2;
+	const vector<p_term> &rest = get_root()->get_rest();
+	if (get_root()->get_first()->get_text() != "." || rest.size() != 2)
+		return nullopt;
+	const p_bind_value l = create_bind_value(rest[0], get_base(), table);
+	const p_bind_value r = create_bind_value(rest[1], get_base(), table);
+	s1 = "[";
+	s1 += l->tostring(table);
+	s2 = r->tostring(table);
+	if (s2 == "[]")
+		return s1 + "]";
+	else if (s2[0] == '[' && s2[s2.size() - 1] == ']')
+		return s1 + ", " + string(s2.begin() + 1, s2.end() - 1) + "]";
+	else
+		return s1 + "| " + s2 + "]";
+}
+
 string composite_t::tostring(const var_lookup &table)
 {
 	stringstream os;
 	auto &rest = get_root()->get_rest();
+	auto a = list2string(table);
+	if (a) {
+		os << *a;
+		return os.str();
+	}
 	os << get_root()->get_first()->get_text();
 	if (rest.empty())
 		return os.str();
