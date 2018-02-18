@@ -255,7 +255,7 @@ optional<string> composite_t::atom2chars(const var_lookup &table)
 	const string &text = root->get_first()->get_text();
 	if (rest.size() == 0) {
 		if (text == "[]")
-			return {};
+			return string();
 		return text;
 	}
 	if (text != "." || rest.size() != 2)

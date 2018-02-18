@@ -26,4 +26,12 @@ not(P) :- true.
 \+ P :- not(P).
 atom_length(Atom,Integer):-atom_chars(Atom,C), length(C,Integer).
 atom_concat(Atom1,Atom2,Atom3):-atom_chars(Atom1,C1),atom_chars(Atom2,C2),conc(C1,C2,C3),atom_chars(Atom3,C3).
+drop([], N, []).
+drop(A, 0, A).
+drop([H|T], N, T2) :- N > 0, N1 is N - 1, drop(T, N1, T2).
+take([], N, []).
+take(A, 0, []).
+take([H|T], N, [H|T2]) :- N > 0, N1 is N - 1, take(T, N1, T2).
+droptake(A, N, L, S) :- drop(A, N, A1), take(A1, L, S).
+sub_atom(A, N, L, S) :- atom_chars(A,C), droptake(C,N,L,C1), atom_chars(S,C1).
 )";
