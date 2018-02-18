@@ -140,6 +140,8 @@ struct token_parser_entry {
 	{regex("^%.*$"),                        symbol::ignore  },
 	{regex(R"(^/\*[\S\s]*?\*/)"),           symbol::ignore  },
 	{regex(R"(^/\*.*)"),                    symbol::append  },
+	{regex(R"(^'(\\.|[^'])*')"),            symbol::string  },
+	{regex(R"(^'.*)"),                      symbol::append  },
 	{regex("^,"),                           symbol::comma   },
 	{regex("^\\|"),                         symbol::vbar    },
 	{regex(R"(^\[\])"),                     symbol::atom    },
@@ -154,8 +156,6 @@ struct token_parser_entry {
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
 	{regex("^[#$&*+-./:<=>?@^~\\\\]+"),     symbol::atom    },
-	{regex(R"(^'(\\.|[^'])*')"),            symbol::string  },
-	{regex(R"(^'.*)"),                      symbol::append  },
 	{regex("^[_$[:upper:]][_$[:alnum:]]*"), symbol::variable},
 	{regex("^."),                           symbol::error   }
 };
@@ -294,6 +294,7 @@ unique_ptr<token> string_transformer(unique_ptr<token> t)
 	string r;
 	bool escape = false;
 	if (t->get_type() == symbol::string) {
+		t->set_flag(symflags::literal);
 		string o = t->get_text();
 		assert(o.length() >= 2);
 		o = o.substr(1, o.length() - 2);
@@ -435,7 +436,8 @@ exp_return check_op(exp_param &param,
 {
 	exp_return r;
 	r.tok = param.context.get_token();
-	if (r.tok->get_type() == symbol::atom) {
+	if (r.tok->get_type()  == symbol::atom &&
+	    r.tok->get_flag() != symflags::literal) {
 		op_t &op = param.context.ops.getop(r.tok->get_text(),
 				param.priority);
 		if (!op.null() && op.get_pred() == param.priority) {

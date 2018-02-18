@@ -25,6 +25,7 @@ namespace {
 	using std::optional;
 	using std::unordered_map;
 	using std::stringstream;
+	using std::string;
 }
 
 extern unique_id atom_id, var_id;
@@ -34,15 +35,18 @@ enum class symbol { none, atom, ignore, append, integer, decimal, string,
 	            eof, query, rules, comma, period, vbar, cut };
 using position_t = std::pair<uint32_t, uint32_t>;
 
+enum class symflags { none, literal };
+
 class token {
 private:
 	string     text;
 	symbol     token_type;
 	position_t position;
+	symflags   flag;
 	int        int_value;
 	float      decimal_value;
 public:
-	token(symbol type) : token_type { type } {}
+	token(symbol type) : token_type {type}, flag {symflags::none} {}
 	token() : token(symbol::error) {}
 	void  set_int_value(int v) { int_value = v;}
 	int   get_int_value() { return int_value; }
@@ -61,6 +65,8 @@ public:
 			return false;
 		}
 	}
+	void set_flag(symflags s) { flag = s; }
+	symflags get_flag() { return flag; }
 	void set_text(string t) { text = t; }
 	const string &get_text() const { return text; }
 	symbol get_type() const { return token_type; }
