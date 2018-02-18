@@ -38,6 +38,9 @@ public:
 	const var_lookup &table) { return fail; }
 	virtual optional<int> getint(var_lookup &) { return nullopt; }
 	virtual optional<float> getdecimal(var_lookup&) { return nullopt; }
+	virtual optional<string> getname(const var_lookup &) { return nullopt; }
+	virtual optional<string> atom2chars(const var_lookup &) {return nullopt; }
+	virtual optional<string> list2string(const var_lookup &) { return nullopt;}
 };
 
 class composite_t : public bind_value {
@@ -56,7 +59,10 @@ public:
 	optional<builtin_t> builtin(uint64_t, var_lookup &, struct env&)override;
 	optional<int> getint(var_lookup &t) override;
 	optional<float> getdecimal(var_lookup&t) override;
-	optional<string> list2string(const var_lookup &);
+	optional<string> list2string(const var_lookup &) override;
+	optional<string> getname(const var_lookup &) override {
+		return root->get_first()->get_text(); }
+	optional<string> atom2chars(const var_lookup &) override;
 };
 
 class variable_t : public composite_t {

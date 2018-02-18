@@ -239,6 +239,26 @@ literal_compare(const vector<p_term> &args, uint64_t base, var_lookup &table,
 		return nullopt;
 }
 
+optional<string> composite_t::atom2chars(const var_lookup &table)
+{
+	if (root->get_first()->get_text() != ".")
+		return nullopt;
+	if (root->get_first()->get_text() == "[]")
+		return string("");
+	auto &rest = root->get_rest();
+	if (rest.size() != 2)
+		return nullopt;
+	p_bind_value b0 = create_bind_value(rest[0], base, table);
+	optional<string> a0 = b0->list2string(table);
+	p_bind_value b1 = create_bind_value(rest[1], base, table);
+	optional<string> a1 = b1->list2string(table);
+	if (!a0 || !a1)
+		return nullopt;
+	if (a0->size() != 1)
+		return nullopt;
+	return *a0 + *a1;
+}
+
 using builtin_fn = optional<builtin_t>(*)(const vector<p_term> &,
         uint64_t, var_lookup &, const string &, struct env &);
 unordered_map<string, pair<builtin_fn, uint32_t>> builtin_map = {
