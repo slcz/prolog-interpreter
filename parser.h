@@ -20,9 +20,11 @@ namespace {
 	using std::vector;
 	using std::set;
 	using std::unique_ptr;
+	using std::shared_ptr;
 	using std::regex;
 	using std::optional;
 	using std::unordered_map;
+	using std::stringstream;
 }
 
 extern unique_id atom_id, var_id;
@@ -71,10 +73,10 @@ public:
 class term {
 private:
 	unique_ptr<token> first;
-	vector<unique_ptr<term>> rest;
+	vector<shared_ptr<term>> rest;
 	int ident;
 public:
-	term(unique_ptr<token> f, vector<unique_ptr<term>> r) :
+	term(unique_ptr<token> f, vector<shared_ptr<term>> r) :
 		first{move(f)}, rest{move(r)}, ident{0} {}
 	term(unique_ptr<token> f) : first{move(f)}, ident{0} {}
 	term(const term& t) = delete;
@@ -83,12 +85,7 @@ public:
 	void set_ident(int idt) { ident = idt;  }
 	friend ostream& operator<<(ostream& os, const term& c);
 };
-using p_term  = unique_ptr<term>;
-
-struct env {
-	uint64_t           max_id;
-	vector<p_term>     generated;
-};
+using p_term  = shared_ptr<term>;
 
 void scan_vars(const p_term&, uint64_t, unordered_map<uint64_t, string>&);
 uint64_t find_max_ids(const p_term&);
@@ -115,3 +112,5 @@ using p_clause = unique_ptr<clause>;
 
 bool program(vector<istream *>);
 optional<p_term> get_term(string);
+optional<p_term> external_parse_term(string);
+string conv2escape(string);

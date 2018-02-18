@@ -163,6 +163,19 @@ struct token_parser_entry {
 template <typename T, size_t N> T* table_begin(T(&arr)[N]) { return &arr[0];   }
 template <typename T, size_t N> T* table_end(T(&arr)[N])   { return &arr[0]+N; }
 
+string conv2escape(string text)
+{
+	string r;
+	r.push_back('\'');
+	for (auto i : text) {
+		if (i == '\'')
+			r.push_back('\\');
+		r.push_back(i);
+	}
+	r.push_back('\'');
+	return r;
+}
+
 unique_ptr<token>
 parse_token(const string::iterator begin, const string::iterator end)
 {
@@ -194,7 +207,9 @@ private:
 	}
 	position_t position;
 public:
+	interp_context() {}
 	interp_context(vector<istream *>is):ins{is}, offset{0}, position{0,0} {}
+	void push_input_stream(istream *i) { ins.push_back(i); }
 	unique_ptr<token> get_token();
 	void ins_transformer(transformer_t t) { transformers.insert(t); }
 	void rmv_transformer(transformer_t t) { transformers.erase(t);  }
@@ -365,6 +380,17 @@ many(interp_context &context, optional<T>(*unit)(interp_context &),
 optional<p_term> parse_exp(interp_context &, int);
 optional<p_term> parse_term(interp_context &);
 optional<p_term> parse_expression(interp_context &);
+
+optional<p_term> external_parse_term(string stream)
+{
+	stringstream s {stream};
+	s = stringstream {stream};
+	vector <istream *> v;
+	v.push_back(&s);
+	interp_context context {move(v)};
+	context.ins_transformer(string_transformer);
+	return parse_expression(context);
+}
 
 optional<p_term> parse_exp_next(interp_context &context, int priority)
 {
@@ -744,18 +770,14 @@ bool program(vector<istream *>ios)
 	vector<p_clause> cs;
 	vector<p_term> q;
 	bool quit = false;
-	struct env env;
 
 	context.ins_transformer(string_transformer);
 	while (!quit) {
 		try {
-			if ((c = parse_clause(context))) {
+			if ((c = parse_clause(context)))
 				cs.push_back(move(*c));
-			} else if (!(q = parse_query(context)).empty()) {
-				env.max_id = var_id.max();
-				env.generated.clear();
-				solve(cs, q, env);
-			}
+			else if (!(q = parse_query(context)).empty())
+				solve(cs, q, var_id.max());
 			unique_ptr<token> t = context.get_token();
 			if (t->get_type() != symbol::eof)
 				context.push(t);

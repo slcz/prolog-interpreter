@@ -24,6 +24,6 @@ different(X, Y).
 not(P) :- P,!,fail.
 not(P) :- true.
 \+ P :- not(P).
-atom_length(Atom,Integer):-atom_chars(Atom,C), length(C, Integer).
-atom_concat(Atom1,Atom2,Atom3):-atom_chars(Atom1,C1),atom_chars(Atom2,C2),conc(C1,C2,Atom3).
+atom_length(Atom,Integer):-atom_chars(Atom,C), length(C,Integer).
+atom_concat(Atom1,Atom2,Atom3):-atom_chars(Atom1,C1),atom_chars(Atom2,C2),conc(C1,C2,C3),atom_chars(Atom3,C3).
 )";

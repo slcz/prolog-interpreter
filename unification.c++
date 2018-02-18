@@ -47,19 +47,19 @@ bool composite_t::loop(uint64_t id, const var_lookup &table)
 	return false;
 }
 
-maybe_ids variable_t::unification(p_bind_value &tgt,var_lookup &table, bool cmp)
+maybe_ids variable_t::unification(p_bind_value tgt,var_lookup &table, bool cmp)
 {
 	if (tgt->loop(get_id(), table))
 		return nullopt;
 	if (!cmp) {
-		table.insert(make_pair(get_id(), move(tgt)));
+		table.insert(make_pair(get_id(), tgt));
 		vector<uint64_t> v { get_id() };
 		return v;
 	} else
 		return vector<uint64_t>();
 }
 
-maybe_ids composite_t::unification(p_bind_value &tgt, var_lookup &table, bool cmp)
+maybe_ids composite_t::unification(p_bind_value tgt, var_lookup &table, bool cmp)
 {
 	shared_ptr<composite_t> c = dynamic_pointer_cast<composite_t>(tgt);
 	if (!c)
@@ -88,7 +88,7 @@ maybe_ids composite_t::unification(p_bind_value &tgt, var_lookup &table, bool cm
 }
 
 template<typename T>
-maybe_ids primitive_t<T>::unification(p_bind_value &tgt, var_lookup &table,
+maybe_ids primitive_t<T>::unification(p_bind_value tgt, var_lookup &table,
     bool cmp)
 {
 	auto c = dynamic_pointer_cast<primitive_t<T>>(tgt);
