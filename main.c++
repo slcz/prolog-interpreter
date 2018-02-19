@@ -14,8 +14,6 @@ using namespace std;
 int main(int argc, char **argv)
 {
 	vector<istream *> ios;
-	stringstream builtin_predicates {builtin_list};
-	ios.push_back(&builtin_predicates);
 	for (int i = 1; i < argc; i ++) {
 		ifstream *fs = new ifstream();
 	       	fs->open(argv[i], fstream::in); 

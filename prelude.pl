@@ -1,6 +1,44 @@
-#pragma once
-
-const std::string builtin_list = R"(
+/* List of supported ISO predicates */
+:- op(50,  xfx, :).
+:- op(100, xfx, @).
+:- op(200, fy, '\\').
+:- op(200, fy,  -).
+:- op(200, xfy, ^).
+:- op(200, xfx, **).
+:- op(400, yfx, *).
+:- op(400, yfx, /).
+:- op(400, yfx, //).
+:- op(400, yfx, rem).
+:- op(400, yfx, mod).
+:- op(400, yfx, <<).
+:- op(400, yfx, >>).
+:- op(500, yfx,  +).
+:- op(500, yfx, '-' ).
+:- op(500, yfx, '/\\').
+:- op(500, yfx, '\\/').
+:- op(700, xfx, =).
+:- op(700, xfx, '\\=').
+:- op(700, xfx, ==).
+:- op(700, xfx, '\\==').
+:- op(700, xfx, @<).
+:- op(700, xfx, @=<).
+:- op(700, xfx, @>).
+:- op(700, xfx, @>=).
+:- op(700, xfx, is).
+:- op(700, xfx, =:=).
+:- op(700, xfx, '=\\=').
+:- op(700, xfx, <).
+:- op(700, xfx, =<).
+:- op(700, xfx, >).
+:- op(700, xfx, >=).
+:- op(700, xfx, =..).
+:- op(900, fy, '\\+').
+:- op(1000, xfx, ',').
+:- op(1050, xfy, ->).
+:- op(1100, xfy, ';').
+:- op(1200, fx, ':-').
+:- op(1200, xfx, ':-').
+:- op(1200, xfx, -->).
 A=A.
 member(X, [X | Tail]).
 member(X, [Head | Tail]) :- member(X, Tail).
@@ -152,4 +190,3 @@ char_code('{',123).
 char_code('|',124).
 char_code('}',125).
 char_code('~',126).
-)";

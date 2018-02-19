@@ -84,48 +84,7 @@ public:
 		else
 			return *m;
 	}
-	operator_t() : dummy { op_t {assoc_t::x, 0} }, operators {
-		{ ":",   { assoc_t::xfx,  50 }},
-		{ "@",   { assoc_t::xfx, 100 }},
-		{ "\\",  { assoc_t::fy,  200 }},
-		{ "-",   { assoc_t::fy,  200 }},
-		{ "^",   { assoc_t::xfy, 200 }},
-		{ "**",  { assoc_t::xfx, 200 }},
-		{ "*",   { assoc_t::yfx, 400 }},
-		{ "/",   { assoc_t::yfx, 400 }},
-		{ "//",  { assoc_t::yfx, 400 }},
-		{ "rem", { assoc_t::yfx, 400 }},
-		{ "mod", { assoc_t::yfx, 400 }},
-		{ "<<",  { assoc_t::yfx, 400 }},
-		{ ">>",  { assoc_t::yfx, 400 }},
-		{ "+",   { assoc_t::yfx, 500 }},
-		{ "-",   { assoc_t::yfx, 500 }},
-		{ "/\\", { assoc_t::yfx, 500 }},
-		{ "\\/", { assoc_t::yfx, 500 }},
-		{ "=",   { assoc_t::xfx, 700 }},
-		{ "\\=", { assoc_t::xfx, 700 }},
-		{ "==",  { assoc_t::xfx, 700 }},
-		{ "\\==",{ assoc_t::xfx, 700 }},
-		{ "@<",  { assoc_t::xfx, 700 }},
-		{ "@=<", { assoc_t::xfx, 700 }},
-		{ "@>",  { assoc_t::xfx, 700 }},
-		{ "@>=", { assoc_t::xfx, 700 }},
-		{ "is",  { assoc_t::xfx, 700 }},
-		{ "=:=", { assoc_t::xfx, 700 }},
-		{ "=\\=",{ assoc_t::xfx, 700 }},
-		{ "<",   { assoc_t::xfx, 700 }},
-		{ "=<",  { assoc_t::xfx, 700 }},
-		{ ">",   { assoc_t::xfx, 700 }},
-		{ ">=",  { assoc_t::xfx, 700 }},
-		{ "=..", { assoc_t::xfx, 700 }},
-		{ "\\+", { assoc_t::fy,  900 }},
-		{ ",",   { assoc_t::xfy,1000 }},
-		{ "->",  { assoc_t::xfy,1050 }},
-		{ ";",   { assoc_t::xfy,1100 }},
-		{ ":-",  { assoc_t::fx, 1200 }},
-		{ ":-",  { assoc_t::xfx,1200 }},
-		{ "-->", { assoc_t::xfx,1200 }},
-	} {
+	operator_t() : dummy { op_t {assoc_t::x, 0} } {
 		for_each(operators.begin(), operators.end(),
 		    [this](const pair<string, op_t>& ent) {
 		    	pred_set.insert(ent.second.get_pred()); });
@@ -155,7 +114,7 @@ struct token_parser_entry {
 	{regex("^[[:lower:]][[:alnum:]_]*"),    symbol::atom    },
 	{regex("^\\?-"),                        symbol::query   },
 	{regex("^:-"),                          symbol::rules   },
-	{regex("^[#$&*+-./:<=>?@^~\\\\]+"),     symbol::atom    },
+	{regex("^[#$&*\\+-./:<=>?@^~\\\\]+"),   symbol::atom    },
 	{regex("^[_$[:upper:]][_$[:alnum:]]*"), symbol::variable},
 	{regex("^."),                           symbol::error   }
 };
@@ -718,6 +677,91 @@ vector<p_term> parse_query(interp_context &context)
 	return goals;
 }
 
+void dummy_directive(interp_context &context, vector<p_term> args)
+{
+	cout << "unsupported directive" << endl;
+}
+
+unordered_map<string, assoc_t> assoc_map = {
+	{"xfy", assoc_t::xfy}, {"yfx", assoc_t::yfx}, {"xfx", assoc_t::xfx},
+	{"fx", assoc_t::fx  }, {"fy", assoc_t::fy  }, {"xf", assoc_t::xf  },
+	{"yf", assoc_t::yf  }, {"x", assoc_t::x    }
+};
+
+void op_directive(interp_context &context, vector<p_term> args)
+{
+	if (args.size() != 3) {
+		cout << "op(priority, associativity, atom)" << endl;
+		return;
+	}
+	if (args[0]->get_first()->get_type() != symbol::integer) {
+		cout << "expect priority" << endl;
+		return;
+	}
+	int priority = args[0]->get_first()->get_int_value();
+	if (priority <= 0 || priority > 1200) {
+		cout << "0 < priority <= 1200" << endl;
+		return;
+	}
+	string assoc_text = args[1]->get_first()->get_text();
+	auto m = assoc_map.find(assoc_text);
+	if (m == assoc_map.end()) {
+		cout << "unsupported associativity" << endl;
+		return;
+	}
+	assoc_t assoc = m->second;
+	auto &op = args[2]->get_first();
+	if (op->get_type() != symbol::atom) {
+		cout << "expect operator" << endl;
+		return;
+	}
+	context.ops.insert(op->get_text(), op_t {assoc, priority});
+}
+
+unordered_map<string, function<void(interp_context &, vector<p_term>)>>
+directive_map =
+	{{"op",              op_directive},
+	 {"dynamic",         dummy_directive},
+	 {"multifile",       dummy_directive},
+	 {"discontiguous",   dummy_directive},
+	 {"char_conversion", dummy_directive},
+	 {"initialization",  dummy_directive},
+	 {"include",         dummy_directive},
+	 {"ensure_loaded",   dummy_directive}};
+
+void
+process_directive(interp_context &context, p_term &term)
+{
+	auto m = directive_map.find(term->get_first()->get_text());
+	if (m == directive_map.end())
+		throw syntax_error(*term->get_first(), "unknow directive");
+	m->second(context, term->get_rest());
+}
+
+optional<p_term> parse_directive(interp_context &context)
+{
+	var_id.clear();
+	unique_ptr<token> t = context.get_token();
+
+	if (!t || t->get_type() != symbol::rules) {
+		context.push(t);
+		return nullopt;
+	}
+	optional<p_term> directive = parse_term(context);
+	if (!directive) {
+		throw syntax_error(*t, "directive expected.");
+		return nullopt;
+	}
+	t = expect_period(context);
+	if (t->get_type() != symbol::period) {
+		throw syntax_error(*t, "expect period at the end.");
+		return nullopt;
+	}
+
+	process_directive(context, *directive);
+	return directive;
+}
+
 uint64_t find_max_ids(const p_term &t)
 {
 	uint64_t max_id = 0;
@@ -771,12 +815,16 @@ bool program(vector<istream *>ios)
 	optional<p_clause> c;
 	vector<p_clause> cs;
 	vector<p_term> q;
+	optional<p_term> d;
+	vector<p_term> directives;
 	bool quit = false;
 
 	context.ins_transformer(string_transformer);
 	while (!quit) {
 		try {
-			if ((c = parse_clause(context)))
+			if ((d = parse_directive(context)))
+				directives.push_back(*d);
+			else if ((c = parse_clause(context)))
 				cs.push_back(move(*c));
 			else if (!(q = parse_query(context)).empty())
 				solve(cs, q, var_id.max());
